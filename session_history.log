@@ -1,0 +1,6 @@
+# Session History - Flowcus Development
+Started: Friday, February 6, 2026
+
+## [2026-02-06 10:40] Journal Title Refinement
+- Task: Restore title to original Large Title position and fix placeholder behavior.
+- Strategy: Moved `TextField` to the top of the `Form`, styled as `.largeTitle`, and used a placeholder for "New Entry" with an empty initial state.

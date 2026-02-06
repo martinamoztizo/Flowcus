@@ -1,3 +1,10 @@
+# Restore Point - February 5, 2026
+
+This file contains the current state of the Flowcus app source code.
+
+## Flowcus/ContentView.swift
+
+```swift
 //
 //  ContentView.swift
 //  Flowcus
@@ -532,53 +539,24 @@ struct TaskListView: View {
     }
 }
 
-// MARK: - 3. JOURNAL VIEW (TITLE SUPPORT)
+// MARK: - 3. JOURNAL VIEW
 struct JournalView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \JournalEntry.timestamp, order: .reverse) private var entries: [JournalEntry]
-    
     @State private var showingAddSheet = false
-    @State private var editingEntry: JournalEntry? // Tracks selection
     
     var body: some View {
         NavigationStack {
             List {
                 ForEach(entries) { entry in
-                    // Make the row tappable to Edit
-                    Button(action: { editingEntry = entry }) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                // Title is now prominent
-                                if !entry.title.isEmpty {
-                                    Text(entry.title)
-                                        .font(.headline)
-                                        .lineLimit(1)
-                                } else {
-                                    Text("Untitled Entry")
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                }
-                                
-                                Spacer()
-                                
-                                Text(entry.mood)
-                                    .font(.caption).padding(4)
-                                    .background(Color(.systemGray6)).cornerRadius(5)
-                            }
-                            
-                            HStack {
-                                Text(entry.timestamp.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            
-                            Text(entry.content)
-                                .font(.body)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(3)
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(entry.timestamp.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Text(entry.mood).font(.caption).padding(4).background(Color(.systemGray6)).cornerRadius(5)
                         }
+                        Text(entry.content).font(.body)
                     }
-                    .buttonStyle(.plain)
                 }
                 .onDelete(perform: deleteEntries)
             }
@@ -588,14 +566,7 @@ struct JournalView: View {
                     Button(action: { showingAddSheet = true }) { Image(systemName: "square.and.pencil") }
                 }
             }
-            // Sheet for ADDING (entry is nil)
-            .sheet(isPresented: $showingAddSheet) {
-                JournalEditorView(entry: nil)
-            }
-            // Sheet for EDITING (entry is passed)
-            .sheet(item: $editingEntry) { entry in
-                JournalEditorView(entry: entry)
-            }
+            .sheet(isPresented: $showingAddSheet) { AddJournalView() }
             .overlay {
                 if entries.isEmpty { ContentUnavailableView("Empty Journal", systemImage: "book", description: Text("Write down your progress.")) }
             }
@@ -607,94 +578,182 @@ struct JournalView: View {
     }
 }
 
-// MARK: - JOURNAL EDITOR VIEW (Formerly AddJournalView)
-struct JournalEditorView: View {
+struct AddJournalView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) var modelContext
-    
-    // Optional Entry for Editing Mode
-    var entry: JournalEntry?
-    
-    @State private var title: String = ""
     @State private var text: String = ""
     @State private var selectedMood: String = "Neutral"
-    @FocusState private var isTitleFocused: Bool // Track focus for the title
-    
     let moods = ["🔥", "🙂", "😐", "😫", "🧠"]
     
     var body: some View {
         NavigationStack {
             Form {
-                // Editable Large Title Area
-                ZStack(alignment: .leading) {
-                    if title.isEmpty && !isTitleFocused {
-                        Text("New Entry")
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(.primary) // 100% Opacity
-                    }
-                    
-                    TextField("", text: $title)
-                        .font(.largeTitle.bold())
-                        .focused($isTitleFocused)
-                        .foregroundStyle(.primary)
-                }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
-                
                 Section("Mood") {
                     Picker("Mood", selection: $selectedMood) {
                         ForEach(moods, id: \.self) { mood in Text(mood).tag(mood) }
                     }
                     .pickerStyle(.segmented)
                 }
-                
                 Section("Log") {
-                    TextEditor(text: $text)
-                        .frame(minHeight: 250)
-                        .overlay(alignment: .topLeading) {
-                            if text.isEmpty {
-                                Text("Write your thoughts here...")
-                                    .foregroundStyle(.tertiary)
-                                    .padding(.top, 8)
-                                    .padding(.leading, 5)
-                            }
-                        }
+                    TextEditor(text: $text).frame(minHeight: 150)
                 }
             }
+            .navigationTitle("New Entry")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        save()
+                        modelContext.insert(JournalEntry(content: text, mood: selectedMood))
                         dismiss()
                     }
                 }
             }
-            .onAppear {
-                if let entry = entry {
-                    title = entry.title
-                    text = entry.content
-                    selectedMood = entry.mood
-                } else {
-                    // Start empty so the placeholder "New Entry" shows and disappears on type
-                    title = ""
-                }
-            }
-        }
-    }
-    
-    private func save() {
-        if let entry = entry {
-            // Update Existing
-            entry.title = title
-            entry.content = text
-            entry.mood = selectedMood
-        } else {
-            // Create New
-            modelContext.insert(JournalEntry(title: title, content: text, mood: selectedMood))
         }
     }
 }
+```
+
+## Flowcus/TimeManager.swift
+
+```swift
+//
+//  TimeManager.swift
+//  Flowcus
+//
+//  Created by E on 2/3/26.
+//
+
+import SwiftUI
+import Combine
+
+class TimerManager: ObservableObject {
+    // These @Published markers are CRITICAL. They tell the UI to update.
+    @Published var timeRemaining: TimeInterval = 25 * 60
+    @Published var initialTime: TimeInterval = 25 * 60
+    @Published var isRunning: Bool = false
+    
+    // XP Points - Stored permanently
+    @Published var xpPoints: Int = UserDefaults.standard.integer(forKey: "user_xp") {
+        didSet {
+            UserDefaults.standard.set(xpPoints, forKey: "user_xp")
+        }
+    }
+    
+    var timer: Timer?
+    var lastBackgroundDate: Date?
+    
+    // Function to set custom minutes (The feature you requested)
+    func setDuration(minutes: Int) {
+        pause()
+        let newTime = TimeInterval(minutes * 60)
+        timeRemaining = newTime
+        initialTime = newTime
+    }
+    
+    func start() {
+        guard !isRunning else { return }
+        isRunning = true
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            self.tick()
+        }
+    }
+    
+    func pause() {
+        isRunning = false
+        timer?.invalidate()
+        timer = nil
+    }
+    
+    private func tick() {
+        if timeRemaining > 0 {
+            timeRemaining -= 1
+        } else {
+            completeTimer()
+        }
+    }
+    
+    private func completeTimer() {
+        pause()
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+        
+        // Award XP only if the session was longer than 20 mins
+        if initialTime >= 20 * 60 {
+            xpPoints += 100
+        }
+    }
+    
+    // Background handling logic
+    func appMovedToBackground() {
+        if isRunning {
+            lastBackgroundDate = Date()
+            timer?.invalidate()
+        }
+    }
+    
+    func appMovedToForeground() {
+        if isRunning, let backgroundDate = lastBackgroundDate {
+            let timePassed = Date().timeIntervalSince(backgroundDate)
+            timeRemaining -= timePassed
+            if timeRemaining <= 0 {
+                timeRemaining = 0
+                completeTimer()
+            } else {
+                start()
+            }
+        }
+        lastBackgroundDate = nil
+    }
+    
+    var progress: Double {
+        guard initialTime > 0 else { return 1.0 }
+        return 1.0 - (timeRemaining / initialTime)
+    }
+    
+    var timeString: String {
+        let minutes = Int(timeRemaining) / 60
+        let seconds = Int(timeRemaining) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+}
+```
+
+## Flowcus/Models.swift
+
+```swift
+//
+//  Models.swift
+//  Flowcus
+//
+//  Created by E on 2/3/26.
+//
+
+import Foundation
+import SwiftData
+
+@Model
+class TaskItem {
+    var title: String
+    var isCompleted: Bool
+    var createdAt: Date
+    
+    init(title: String, isCompleted: Bool = false) {
+        self.title = title
+        self.isCompleted = isCompleted
+        self.createdAt = Date()
+    }
+}
+
+@Model
+class JournalEntry {
+    var content: String
+    var timestamp: Date
+    var mood: String // Simple "Good", "Neutral", "Bad" tracker
+    
+    init(content: String, mood: String = "Neutral") {
+        self.content = content
+        self.timestamp = Date()
+        self.mood = mood
+    }
+}
+```

@@ -23,11 +23,13 @@ class TaskItem {
 
 @Model
 class JournalEntry {
+    var title: String // New Title Property
     var content: String
     var timestamp: Date
     var mood: String // Simple "Good", "Neutral", "Bad" tracker
     
-    init(content: String, mood: String = "Neutral") {
+    init(title: String = "", content: String, mood: String = "Neutral") {
+        self.title = title
         self.content = content
         self.timestamp = Date()
         self.mood = mood
