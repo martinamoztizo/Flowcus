@@ -8,6 +8,15 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - COLORS
+extension Color {
+    static let cardinalRed = Color(red: 0.768, green: 0.118, blue: 0.227)
+}
+
+extension ShapeStyle where Self == Color {
+    static var cardinalRed: Color { .cardinalRed }
+}
+
 // MARK: - APP ENTRY POINT
 struct ContentView: View {
     var body: some View {
@@ -27,7 +36,7 @@ struct ContentView: View {
                     Label("Journal", systemImage: "book.fill")
                 }
         }
-        .tint(.indigo)
+        .tint(.cardinalRed)
     }
 }
 
@@ -70,11 +79,13 @@ struct Wave: Shape {
 struct FocusTimerView: View {
     @StateObject private var timerManager = TimerManager()
     @Environment(\.scenePhase) var scenePhase
+    @Environment(\.colorScheme) var colorScheme
     
     // PERMANENT SETTINGS
     @AppStorage("workMinutes") private var defaultWorkTime = 25
     @AppStorage("shortBreakMinutes") private var shortBreakTime = 5
     @AppStorage("longBreakMinutes") private var longBreakTime = 15
+    @AppStorage("sessionCount") private var sessionCount = 0
     
     @State private var showingSettings = false
     @State private var selectedMode = "Focus"
@@ -109,19 +120,35 @@ struct FocusTimerView: View {
     }
     
     // Content Text Color (Timer numbers)
-    // Stopped (White BG) -> Black Text
-    // Active (Black BG) -> White Text
+    // Session Active -> Always White (on Black BG)
+    // Session Stopped -> Adaptive (Black in Light Mode, White in Dark Mode)
     var contentColor: Color {
-        return isSessionActive ? .white : .black
+        if isSessionActive {
+            return .white
+        } else {
+            return colorScheme == .dark ? .white : .black
+        }
+    }
+    
+    // Background Color Logic
+    // Session Active -> Always Black (The Void)
+    // Session Stopped -> Adaptive (White in Light Mode, Black in Dark Mode)
+    var backgroundColor: Color {
+        if isSessionActive {
+            return .black
+        } else {
+            return colorScheme == .dark ? .black : .white
+        }
     }
     
     // MARK: - STATUS BAR LOGIC (USER REQUEST)
-    // 0.965 is roughly the halfway point of the Notch/Battery area.
     var statusBarScheme: ColorScheme {
         if !isSessionActive {
-            return .light // Stopped -> White BG -> Black Icons
+            // Stopped: Adaptive
+            return colorScheme == .dark ? .dark : .light
         }
-        // Active Session (Black BG):
+        
+        // Active Session (Always Black BG):
         // If Liquid > 96.5% (Covering the battery) -> Black Icons (.light)
         // If Liquid < 96.5% (Revealing Black BG) -> White Icons (.dark)
         return liquidHeightPercentage > 0.965 ? .light : .dark
@@ -131,8 +158,7 @@ struct FocusTimerView: View {
         NavigationStack {
             ZStack {
                 // 1. BACKGROUND (Dynamic)
-                // White when stopped. Black when running (The "Void" behind the liquid).
-                (isSessionActive ? Color.black : Color.white)
+                backgroundColor
                     .ignoresSafeArea()
                     .animation(.easeInOut(duration: 0.5), value: isSessionActive)
                 
@@ -199,8 +225,8 @@ struct FocusTimerView: View {
                                     .pickerStyle(.segmented)
                                     .padding(.horizontal, 40)
                                     // Adapt picker text to background
-                                    .colorScheme(isPaused ? .dark : .light)
-                                    .onChange(of: selectedMode) { newMode in updateTimerForMode(newMode) }
+                                    .colorScheme(contentColor == .white ? .dark : .light)
+                                    .onChange(of: selectedMode) { _, newMode in updateTimerForMode(newMode) }
                                     .transition(.move(edge: .bottom).combined(with: .opacity))
                                 }
                                 
@@ -256,20 +282,6 @@ struct FocusTimerView: View {
             
             // TOOLBAR
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bolt.fill")
-                            .font(.caption)
-                            .foregroundStyle(contentColor == .white ? .yellow : themeColors[0])
-                        Text("\(timerManager.xpPoints) XP")
-                            .font(.caption).fontWeight(.bold).foregroundStyle(contentColor)
-                    }
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(contentColor == .white ? Material.thin : Material.regular)
-                    .cornerRadius(20)
-                    .animation(.easeIn(duration: 0.3), value: contentColor)
-                }
-                
                 ToolbarItem(placement: .topBarTrailing) {
                     if !isSessionActive {
                         Button(action: { showingSettings = true }) {
@@ -281,12 +293,12 @@ struct FocusTimerView: View {
             .sheet(isPresented: $showingSettings) {
                 SettingsView().onDisappear { updateTimerForMode(selectedMode) }
             }
-            .onChange(of: timerManager.timeRemaining) { timeLeft in
+            .onChange(of: timerManager.timeRemaining) { _, timeLeft in
                 if timeLeft == 0 && timerManager.isRunning {
                     completeSession()
                 }
             }
-            .onChange(of: scenePhase) { newPhase in
+            .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active { timerManager.appMovedToForeground() }
                 if newPhase == .background { timerManager.appMovedToBackground() }
             }
@@ -326,10 +338,15 @@ struct FocusTimerView: View {
         
         withAnimation {
             if selectedMode == "Focus" {
-                selectedMode = "Short Break"
-            } else if selectedMode == "Short Break" {
-                selectedMode = "Focus"
-            } else if selectedMode == "Long Break" {
+                sessionCount += 1
+                if sessionCount >= 2 {
+                    selectedMode = "Long Break"
+                    sessionCount = 0 // Reset after long break trigger
+                } else {
+                    selectedMode = "Short Break"
+                }
+            } else {
+                // Return to Focus after any break
                 selectedMode = "Focus"
             }
             updateTimerForMode(selectedMode)
@@ -348,6 +365,21 @@ struct FocusTimerView: View {
 }
 
 // MARK: - SETTINGS VIEW
+struct TimerPreset: Identifiable {
+    let id = UUID()
+    let name: String
+    let focus: Int
+    let short: Int
+    let long: Int
+}
+
+let timerPresets = [
+    TimerPreset(name: "Classic", focus: 25, short: 5, long: 15),
+    TimerPreset(name: "Extended", focus: 50, short: 10, long: 20),
+    TimerPreset(name: "Science", focus: 52, short: 17, long: 20),
+    TimerPreset(name: "Deep", focus: 90, short: 20, long: 30)
+]
+
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     
@@ -372,31 +404,32 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("Tap to Edit")) {
+                Section {
                     Button(action: { activeSetting = .work }) {
                         HStack {
                             Text("Focus Duration").foregroundStyle(.primary)
                             Spacer()
-                            Text("\(defaultWorkTime) min").foregroundStyle(.indigo)
+                            Text("\(defaultWorkTime) min").foregroundStyle(.cardinalRed)
                         }
                     }
                     Button(action: { activeSetting = .shortBreak }) {
                         HStack {
                             Text("Short Break").foregroundStyle(.primary)
                             Spacer()
-                            Text("\(shortBreakTime) min").foregroundStyle(.indigo)
+                            Text("\(shortBreakTime) min").foregroundStyle(.cardinalRed)
                         }
                     }
                     Button(action: { activeSetting = .longBreak }) {
                         HStack {
                             Text("Long Break").foregroundStyle(.primary)
                             Spacer()
-                            Text("\(longBreakTime) min").foregroundStyle(.indigo)
+                            Text("\(longBreakTime) min").foregroundStyle(.cardinalRed)
                         }
                     }
                 }
+                
                 Section {
-                    Text("Your changes are saved automatically.")
+                    Text("Selecting a standard duration will automatically update your setup.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -405,10 +438,32 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
             .sheet(item: $activeSetting) { setting in
-                TimePickerSheet(title: setting.title, value: binding(for: setting))
-                    .presentationDetents([.height(350)])
+                TimePickerSheet(title: setting.title, value: binding(for: setting), presetValues: getPresets(for: setting))
+                    .presentationDetents([.height(250)])
                     .presentationCornerRadius(25)
             }
+            // AUTO-UPDATE LOGIC
+            .onChange(of: defaultWorkTime) { _, newValue in
+                if let preset = timerPresets.first(where: { $0.focus == newValue }) {
+                    shortBreakTime = preset.short
+                    longBreakTime = preset.long
+                }
+            }
+            .onChange(of: shortBreakTime) { _, newValue in
+                // Reverse update for Short Break (Unique values allow this)
+                if let preset = timerPresets.first(where: { $0.short == newValue }) {
+                    defaultWorkTime = preset.focus
+                    longBreakTime = preset.long
+                }
+            }
+        }
+    }
+    
+    private func getPresets(for setting: SettingType) -> [Int] {
+        switch setting {
+        case .work: return timerPresets.map(\.focus)
+        case .shortBreak: return timerPresets.map(\.short)
+        case .longBreak: return Array(Set(timerPresets.map(\.long))).sorted()
         }
     }
     
@@ -425,6 +480,7 @@ struct SettingsView: View {
 struct TimePickerSheet: View {
     let title: String
     @Binding var value: Int
+    let presetValues: [Int]
     @Environment(\.dismiss) var dismiss
     
     @State private var isCustomMode = false
@@ -432,7 +488,7 @@ struct TimePickerSheet: View {
     @FocusState private var isInputFocused: Bool
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 0) {
             HStack {
                 Text(title).font(.headline)
                 Spacer()
@@ -444,28 +500,40 @@ struct TimePickerSheet: View {
             }
             .padding().background(Color(.systemGray6))
             
-            if isCustomMode {
-                VStack(spacing: 20) {
-                    Text("Enter Minutes").font(.subheadline).foregroundStyle(.secondary)
-                    TextField("e.g. 90", text: $customInputText)
-                        .font(.system(size: 40, weight: .bold))
-                        .multilineTextAlignment(.center)
-                        .keyboardType(.numberPad)
-                        .focused($isInputFocused)
-                        .onAppear { isInputFocused = true }
-                    Button("Switch to Wheel") { withAnimation { isCustomMode = false } }
-                        .font(.caption).foregroundStyle(.indigo)
+            VStack(spacing: 10) {
+                if isCustomMode {
+                    // CUSTOM TEXT INPUT
+                    VStack(spacing: 20) {
+                        Text("Enter Minutes").font(.subheadline).foregroundStyle(.secondary)
+                        TextField("e.g. 90", text: $customInputText)
+                            .font(.system(size: 40, weight: .bold))
+                            .multilineTextAlignment(.center)
+                            .keyboardType(.numberPad)
+                                 .focused($isInputFocused)
+                            .onAppear { 
+                                customInputText = "\(value)"
+                                isInputFocused = true 
+                            }
+                        Button("Switch to Wheel") { withAnimation { isCustomMode = false } }
+                            .font(.caption).foregroundStyle(.cardinalRed)
+                    }
+                    .padding(.top, 20).transition(.opacity)
+                } else {
+                    // RESTRICTED WHEEL
+                    VStack(spacing: 0) {
+                        Picker("Time", selection: $value) {
+                            ForEach(presetValues, id: \.self) { min in 
+                                Text("\(min) min").tag(min) 
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .padding(.horizontal)
+                        
+                        Button("Enter Custom Amount") { withAnimation { isCustomMode = true } }
+                            .font(.subheadline).foregroundStyle(.cardinalRed).padding(.bottom, 5)
+                    }
+                    .transition(.opacity)
                 }
-                .padding(.top, 20).transition(.opacity)
-            } else {
-                Picker("Time", selection: $value) {
-                    ForEach(1...60, id: \.self) { min in Text("\(min) min").tag(min) }
-                }
-                .pickerStyle(.wheel)
-                .padding(.horizontal).transition(.opacity)
-                
-                Button("Enter Custom Amount") { withAnimation { isCustomMode = true } }
-                    .font(.subheadline).foregroundStyle(.indigo).padding(.bottom, 20)
             }
             Spacer()
         }
@@ -474,50 +542,228 @@ struct TimePickerSheet: View {
 
 // MARK: - 2. TASK LIST VIEW
 struct TaskListView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \TaskItem.createdAt, order: .reverse) private var tasks: [TaskItem]
-    @State private var newTaskTitle: String = ""
+    @State private var selectedDate: Date = Date()
+    
+    // Interaction State
+    @State private var dragOffset: CGFloat = 0
+    @State private var isCalendarOpen: Bool = false
+    
+    // Constants
+    let calendarHeight: CGFloat = 400
+    let closedOffset: CGFloat = 300 // Lifted so text is visible with tight gap
+    let dragThreshold: CGFloat = 80
+    
+    var headerTitle: String {
+        if Calendar.current.isDateInToday(selectedDate) {
+            return "Today"
+        } else {
+            return selectedDate.formatted(date: .abbreviated, time: .omitted)
+        }
+    }
+    
+    var bottomDateString: String {
+        selectedDate.formatted(date: .complete, time: .omitted)
+    }
+    
+    // Calculate how much of the calendar is revealed (0.0 to 1.0)
+    var revealProgress: Double {
+        let totalOffset = (isCalendarOpen ? 0 : closedOffset) + dragOffset
+        let progress = 1.0 - (totalOffset / closedOffset)
+        return min(max(progress, 0), 1)
+    }
     
     var body: some View {
         NavigationStack {
-            VStack {
-                HStack {
-                    TextField("New task...", text: $newTaskTitle)
-                        .padding().background(Color(.systemGray6)).cornerRadius(10)
-                        .submitLabel(.done).onSubmit(addTask)
-                    Button(action: addTask) {
-                        Image(systemName: "plus").font(.title2).padding()
-                            .background(Color.indigo).foregroundColor(.white).cornerRadius(10)
-                    }
-                }
-                .padding()
+            ZStack(alignment: .bottom) {
+                // 1. TASK LIST
+                DailyTaskList(date: selectedDate)
+                    .id(selectedDate)
                 
-                if tasks.isEmpty {
-                    ContentUnavailableView("No Tasks", systemImage: "checkmark.circle", description: Text("Add a task to clear your mind."))
-                } else {
-                    List {
-                        ForEach(tasks) { task in
-                            HStack {
-                                Button(action: { toggleTask(task) }) {
-                                    Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(task.isCompleted ? .green : .gray).font(.title2)
-                                }
-                                .buttonStyle(.plain)
-                                Text(task.title).strikethrough(task.isCompleted).foregroundStyle(task.isCompleted ? .gray : .primary)
+                // 2. DIMMING LAYER
+                if revealProgress > 0 {
+                    Color.black
+                        .opacity(revealProgress * 0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture { closeCalendar() }
+                }
+                
+                // 3. UNIFIED SLIDING PANEL (Text + Calendar)
+                VStack(spacing: -10) {
+                    // A. TRIGGER TEXT (Sits on top of calendar)
+                    ZStack {
+                        Text(bottomDateString)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                            .padding(.top, 20)
+                            .padding(.bottom, 30) // Tight gap
+                            .padding(.horizontal, 40)
+                            .background(Color.white.opacity(0.001)) // Hit test
+                            // Fade out as we open
+                            .opacity(1.0 - (revealProgress * 2)) 
+                    }
+                    .frame(maxWidth: .infinity)
+                    
+                    // B. CALENDAR
+                    VStack(spacing: 20) {
+                        // Handle
+                        Capsule()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 40, height: 5)
+                            .padding(.top, 15)
+                        
+                        DatePicker("", selection: $selectedDate, displayedComponents: .date)
+                            .datePickerStyle(.graphical)
+                            .padding(.horizontal)
+                        
+                        Spacer()
+                    }
+                    .frame(height: calendarHeight)
+                    .background(Color(UIColor.systemBackground))
+                    .cornerRadius(25)
+                    .shadow(radius: 20)
+                    // FADE IN as we drag up (Critical for "Invisible initially")
+                    .opacity(revealProgress)
+                }
+                // OFFSETS
+                // Base position: Open = 0, Closed = Push down by closedOffset
+                .offset(y: isCalendarOpen ? 0 : closedOffset)
+                // Interactive Drag
+                .offset(y: dragOffset)
+                // GESTURE
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            let translation = value.translation.height
+                            if isCalendarOpen {
+                                // Dragging Down (Positive)
+                                if translation > 0 { dragOffset = translation }
+                                else { dragOffset = translation * 0.1 } // Rubber band up
+                            } else {
+                                // Dragging Up (Negative)
+                                if translation < 0 { dragOffset = translation }
+                                else { dragOffset = translation * 0.1 } // Rubber band down
                             }
                         }
-                        .onDelete(perform: deleteTasks)
-                    }
-                    .listStyle(.plain)
+                        .onEnded { value in
+                            let translation = value.translation.height
+                            let velocity = value.predictedEndTranslation.height
+                            
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                if isCalendarOpen {
+                                    // Close if dragged down far enough
+                                    if translation > dragThreshold || velocity > 200 {
+                                        isCalendarOpen = false
+                                    }
+                                } else {
+                                    // Open if dragged up far enough
+                                    if translation < -dragThreshold || velocity < -200 {
+                                        isCalendarOpen = true
+                                    }
+                                }
+                                dragOffset = 0
+                            }
+                        }
+                )
+            }
+            .ignoresSafeArea(edges: .bottom) // Ensures panel slides completely off screen
+            .navigationTitle(headerTitle)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+    
+    // MARK: - HELPERS
+    private func closeCalendar() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            isCalendarOpen = false
+            dragOffset = 0
+        }
+    }
+}
+
+struct DailyTaskList: View {
+    @Environment(\.modelContext) private var modelContext
+    // The query is dynamic based on the init
+    @Query private var tasks: [TaskItem]
+    
+    let date: Date
+    @State private var newTaskTitle: String = ""
+    
+    init(date: Date) {
+        self.date = date
+        
+        // Calculate start and end of the selected day for filtering
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        
+        // Predicate: scheduledDate >= start AND scheduledDate < end
+        _tasks = Query(filter: #Predicate {
+            $0.scheduledDate >= startOfDay && $0.scheduledDate < endOfDay
+        }, sort: \TaskItem.createdAt, order: .reverse)
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // INPUT FIELD
+            HStack {
+                TextField("Add task...", text: $newTaskTitle)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    .submitLabel(.done)
+                    .onSubmit(addTask)
+                
+                Button(action: addTask) {
+                    Image(systemName: "plus")
+                        .font(.title2).padding()
+                        .background(Color.cardinalRed)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
             }
-            .navigationTitle("To-Do")
+            .padding(.horizontal)
+            .padding(.top, 16)
+            .padding(.bottom, 10)
+            
+            // LIST
+            if tasks.isEmpty {
+                ContentUnavailableView(
+                    "No Tasks",
+                    systemImage: "checklist",
+                    description: Text("Plan your day on \(date.formatted(date: .abbreviated, time: .omitted)).")
+                )
+            } else {
+                List {
+                    ForEach(tasks) { task in
+                        HStack {
+                            Button(action: { toggleTask(task) }) {
+                                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(task.isCompleted ? .green : .gray)
+                                    .font(.title2)
+                            }
+                            .buttonStyle(.plain)
+                            
+                            Text(task.title)
+                                .strikethrough(task.isCompleted)
+                                .foregroundStyle(task.isCompleted ? .gray : .primary)
+                        }
+                    }
+                    .onDelete(perform: deleteTasks)
+                }
+                .listStyle(.plain)
+                // Add bottom padding so the last item isn't covered by the Bottom Bar
+                .safeAreaInset(edge: .bottom) {
+                    Color.clear.frame(height: 100)
+                }
+            }
         }
     }
     
     private func addTask() {
         guard !newTaskTitle.isEmpty else { return }
-        modelContext.insert(TaskItem(title: newTaskTitle))
+        // Create task specifically for the selected date
+        let newTask = TaskItem(title: newTaskTitle, scheduledDate: date)
+        modelContext.insert(newTask)
         newTaskTitle = ""
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
@@ -528,7 +774,11 @@ struct TaskListView: View {
     }
     
     private func deleteTasks(offsets: IndexSet) {
-        withAnimation { for index in offsets { modelContext.delete(tasks[index]) } }
+        withAnimation {
+            for index in offsets {
+                modelContext.delete(tasks[index])
+            }
+        }
     }
 }
 

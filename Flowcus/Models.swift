@@ -13,11 +13,13 @@ class TaskItem {
     var title: String
     var isCompleted: Bool
     var createdAt: Date
+    var scheduledDate: Date // Links task to a specific calendar day
     
-    init(title: String, isCompleted: Bool = false) {
+    init(title: String, isCompleted: Bool = false, scheduledDate: Date = Date()) {
         self.title = title
         self.isCompleted = isCompleted
         self.createdAt = Date()
+        self.scheduledDate = scheduledDate
     }
 }
 

@@ -14,13 +14,6 @@ class TimerManager: ObservableObject {
     @Published var initialTime: TimeInterval = 25 * 60
     @Published var isRunning: Bool = false
     
-    // XP Points - Stored permanently
-    @Published var xpPoints: Int = UserDefaults.standard.integer(forKey: "user_xp") {
-        didSet {
-            UserDefaults.standard.set(xpPoints, forKey: "user_xp")
-        }
-    }
-    
     var timer: Timer?
     var lastBackgroundDate: Date?
     
@@ -58,11 +51,6 @@ class TimerManager: ObservableObject {
         pause()
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
-        
-        // Award XP only if the session was longer than 20 mins
-        if initialTime >= 20 * 60 {
-            xpPoints += 100
-        }
     }
     
     // Background handling logic
