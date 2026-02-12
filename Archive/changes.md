@@ -1,0 +1,5 @@
+[Medium] Status bar style logic may not work as intended. .toolbarColorScheme(..., for: .navigationBar) doesn’t reliably change status bar icon color when the navigation bar is hidden. If the requirement is “icon color flips based on liquid height,” this usually needs a custom hosting controller override.
+[Medium] Custom duration accepts 0 or negative values. That can lead to initialTime == 0 and an instant completion or full-screen liquid. This is a logic edge case worth clamping/validating.
+[Low] TimelineView(.animation) runs even when the timer is idle. That keeps the wave animation ticking, which is unnecessary CPU/GPU usage and battery drain when no session is active.
+[Low] Stringly‑typed modes ("Focus", "Short Break", etc.) are scattered. Easy to typo and harder to refactor; an enum would be safer.
+[Low] sessionCount persists but selectedMode does not. On relaunch, you always start in “Focus” even if sessionCount carried over, which can trigger a long break earlier than expected.
