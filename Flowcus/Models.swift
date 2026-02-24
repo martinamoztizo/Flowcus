@@ -25,15 +25,21 @@ class TaskItem {
 
 @Model
 class JournalEntry {
+    static let allowedMoods: Set<String> = ["🔥", "🙂", "😐", "😫", "🧠"]
+
     var title: String // New Title Property
     var content: String
     var timestamp: Date
-    var mood: String // Simple "Good", "Neutral", "Bad" tracker
+    var mood: String // Stored as emoji for consistent picker/display values
     
-    init(title: String = "", content: String, mood: String = "Neutral") {
+    init(title: String = "", content: String, mood: String = "😐") {
         self.title = title
         self.content = content
         self.timestamp = Date()
-        self.mood = mood
+        self.mood = Self.allowedMoods.contains(mood) ? mood : "😐"
+    }
+
+    func setMood(_ newMood: String) {
+        mood = Self.allowedMoods.contains(newMood) ? newMood : "😐"
     }
 }

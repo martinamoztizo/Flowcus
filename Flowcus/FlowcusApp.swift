@@ -7,9 +7,38 @@
 
 import SwiftUI
 import SwiftData
+import CoreData
 
 @main
-struct FocusFlowApp: App {
+struct FlowcusApp: App {
+    private static let incompatibleStoreErrorCodes: Set<Int> = [
+        NSPersistentStoreIncompatibleSchemaError,
+        NSPersistentStoreIncompatibleVersionHashError,
+        NSMigrationMissingSourceModelError,
+        NSMigrationMissingMappingModelError
+    ]
+
+    private static func shouldResetStore(for error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == NSCocoaErrorDomain && incompatibleStoreErrorCodes.contains(nsError.code)
+    }
+
+    private static func removeStoreFiles(at url: URL) throws {
+        let fm = FileManager.default
+        let paths: Set<String> = [
+            url.path,
+            "\(url.path)-shm",
+            "\(url.path)-wal",
+            url.deletingPathExtension().appendingPathExtension("sqlite").path,
+            url.deletingPathExtension().appendingPathExtension("sqlite-shm").path,
+            url.deletingPathExtension().appendingPathExtension("sqlite-wal").path
+        ]
+
+        for path in paths where fm.fileExists(atPath: path) {
+            try fm.removeItem(atPath: path)
+        }
+    }
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             TaskItem.self,
@@ -21,23 +50,21 @@ struct FocusFlowApp: App {
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
             print("Could not create ModelContainer: \(error)")
-            print("Data schema changed. Attempting to delete old incompatible data...")
-            
-            // AUTO-FIX: Delete the old database file if schema mismatch occurs
-            let url = modelConfiguration.url
-            try? FileManager.default.removeItem(at: url)
-            // Also clean up helper files
-            let shmUrl = url.deletingPathExtension().appendingPathExtension("sqlite-shm")
-            let walUrl = url.deletingPathExtension().appendingPathExtension("sqlite-wal")
-            try? FileManager.default.removeItem(at: shmUrl)
-            try? FileManager.default.removeItem(at: walUrl)
+            #if DEBUG
+            if FlowcusApp.shouldResetStore(for: error) {
+                print("Incompatible data model detected. Resetting local store...")
+                let storeURL = modelConfiguration.url
 
-            // Retry creating the container from scratch
-            do {
-                return try ModelContainer(for: schema, configurations: [modelConfiguration])
-            } catch {
-                fatalError("Could not create ModelContainer even after reset: \(error)")
+                do {
+                    try FlowcusApp.removeStoreFiles(at: storeURL)
+                    return try ModelContainer(for: schema, configurations: [modelConfiguration])
+                } catch {
+                    fatalError("Could not create ModelContainer after migration reset: \(error)")
+                }
             }
+            #endif
+
+            fatalError("Could not create ModelContainer: \(error)")
         }
     }()
 

@@ -13,7 +13,7 @@
 2.  **Task Management (To-Do):**
     -   **Calendar Integration:** Tasks are linked to specific dates (`scheduledDate`).
     -   **Reachability UI:** Floating Action Button (FAB) at the bottom-left opens a swipe-up calendar sheet.
-    -   **Minimalist Header:** Displays the current date clearly.
+    -   **Unified Sliding Panel:** Combines the date display and calendar into a single interactive sheet.
 3.  **Journaling (Brain Dump):**
     -   Supports mood tracking and text entries.
     -   **Editable Titles:** "New Entry" placeholder allows direct in-place editing.
@@ -26,14 +26,15 @@
 -   **UI Framework:** SwiftUI
 -   **Persistence:** `SwiftData` (`TaskItem`, `JournalEntry`)
     -   Includes auto-migration logic in `FlowcusApp.swift` to handle schema changes by resetting the store if needed during development.
--   **State Management:** `ObservableObject` (`TimeManager`) and SwiftUI `@State`/`@Binding`.
+-   **State Management:** `ObservableObject` (`TimerManager` in `TimeManager.swift`) and SwiftUI `@State`/`@Binding`.
 -   **Configuration:** `AppStorage` used for persistent user settings (Timer durations).
 
 ## Key Files
 -   **`Flowcus/FlowcusApp.swift`**: Application entry point. Sets up the `ModelContainer` for SwiftData.
 -   **`Flowcus/ContentView.swift`**: The main hub containing the `TabView` navigation and the implementation of all major views (`FocusTimerView`, `TaskListView`, `JournalView`).
--   **`Flowcus/TimeManager.swift`**: Logic for the countdown timer, state management (running/paused), and background/foreground transitions.
+-   **`Flowcus/TimeManager.swift`**: `TimerManager` class logic for countdown timer, state management, and background/foreground transitions.
 -   **`Flowcus/Models.swift`**: SwiftData model definitions.
+-   **`ADHD_PRODUCTIVITY_PLAN.md`**: Detailed research-backed roadmap and feature specifications.
 -   **`PROTOTYPE.md`**: A live snapshot of the key source files, used for session recovery.
 -   **`session_history.log`**: A log of recent development prompts and changes.
 
@@ -43,3 +44,4 @@
 -   **Design Philosophy:**
     -   **Aesthetic:** Clean, minimal, "Day/Night" mode shifts based on timer state.
     -   **Reachability:** Critical interactive elements (like the Calendar toggle) should be easily accessible (bottom of screen).
+    -   **ADHD-Centric:** Low friction, visual feedback, guilt-free mechanics.
