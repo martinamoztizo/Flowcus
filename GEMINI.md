@@ -26,7 +26,7 @@
 -   **UI Framework:** SwiftUI
 -   **Persistence:** `SwiftData` (`TaskItem`, `JournalEntry`)
     -   Includes auto-migration logic in `FlowcusApp.swift` to handle schema changes by resetting the store if needed during development.
--   **State Management:** `ObservableObject` (`TimerManager` in `TimeManager.swift`) and SwiftUI `@State`/`@Binding`.
+-   **State Management:** `ObservableObject` (`TimeManager` using a persistent `TimerState` enum backed by `UserDefaults`) and SwiftUI `@State`/`@Binding`.
 -   **Configuration:** `AppStorage` used for persistent user settings (Timer durations).
 
 ## Key Files
