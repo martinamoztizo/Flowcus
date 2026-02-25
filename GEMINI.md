@@ -31,16 +31,17 @@
 
 ## Key Files
 -   **`Flowcus/FlowcusApp.swift`**: Application entry point. Sets up the `ModelContainer` for SwiftData.
--   **`Flowcus/ContentView.swift`**: The main hub containing the `TabView` navigation and the implementation of all major views (`FocusTimerView`, `TaskListView`, `JournalView`).
--   **`Flowcus/TimeManager.swift`**: `TimerManager` class logic for countdown timer, state management, and background/foreground transitions.
+-   **`Flowcus/ContentView.swift`**: The main hub containing the `TabView` navigation.
+-   **`Flowcus/FocusTimer.swift`**: Implementation of `FocusTimerView`, custom `Wave` shape, and timer settings.
+-   **`Flowcus/TaskList.swift`**: Implementation of `TaskListView` including the unified calendar and task lists.
+-   **`Flowcus/Journal.swift`**: Implementation of `JournalView`, editable entries, and mood helpers.
+-   **`Flowcus/ColorProfile.swift`**: Centralized shared color definitions (e.g., `cardinalRed`).
+-   **`Flowcus/TimeManager.swift`**: `TimeManager` class logic for countdown timer, state management, and background/foreground transitions.
 -   **`Flowcus/Models.swift`**: SwiftData model definitions.
--   **`ADHD_PRODUCTIVITY_PLAN.md`**: Detailed research-backed roadmap and feature specifications.
--   **`PROTOTYPE.md`**: A live snapshot of the key source files, used for session recovery.
--   **`session_history.log`**: A log of recent development prompts and changes.
 
 ## Development Workflow
 -   **Building:** Open `Flowcus.xcodeproj` in Xcode and press **Run (Cmd+R)**.
--   **Session Recovery:** If the environment crashes, use `PROTOTYPE.md` to restore the latest code state and `session_history.log` to understand the context.
+-   **Version Control:** The project uses Git. `Flowcus/` is the sole source of truth. Use standard commits to save state and branches to experiment with new features, instead of manual archive folders.
 -   **Design Philosophy:**
     -   **Aesthetic:** Clean, minimal, "Day/Night" mode shifts based on timer state.
     -   **Reachability:** Critical interactive elements (like the Calendar toggle) should be easily accessible (bottom of screen).
