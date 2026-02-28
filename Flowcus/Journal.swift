@@ -14,18 +14,31 @@ struct JournalView: View {
     @State private var showingAddSheet = false
     @State private var editingEntry: JournalEntry? // Tracks selection
     
-    // SMART EMOJI ENGINE: Calculates top 5 used emojis on the fly
+    // SMART EMOJI ENGINE: Calculates top 5 used emojis based on Frequency + Recency
     var topEmojis: [String] {
         let defaults = ["🔥", "🙂", "😐", "😫", "🧠"]
         if entries.isEmpty { return defaults }
         
-        // Group by exact emoji string and count frequencies
-        let counts = Dictionary(grouping: entries, by: \.mood).mapValues { $0.count }
+        // Track both the total count and the most recent timestamp for each emoji
+        var stats: [String: (count: Int, lastUsed: Date)] = [:]
         
-        // Sort highest to lowest and extract the keys
-        let sorted = counts.sorted { $0.value > $1.value }.map { $0.key }
+        for entry in entries {
+            if let existing = stats[entry.mood] {
+                stats[entry.mood] = (count: existing.count + 1, lastUsed: max(existing.lastUsed, entry.timestamp))
+            } else {
+                stats[entry.mood] = (count: 1, lastUsed: entry.timestamp)
+            }
+        }
         
-        // Take the top 5, pad with defaults if necessary so we always have exactly 5 options
+        // Sort highest count first. If tied, most recently used wins.
+        let sorted = stats.sorted {
+            if $0.value.count == $1.value.count {
+                return $0.value.lastUsed > $1.value.lastUsed // Recency tie-breaker
+            }
+            return $0.value.count > $1.value.count // Frequency sort
+        }.map { $0.key }
+        
+        // Take the top 5, pad with defaults if necessary
         var result = Array(sorted.prefix(5))
         for emoji in defaults where result.count < 5 && !result.contains(emoji) {
             result.append(emoji)
@@ -114,6 +127,10 @@ struct JournalEditorView: View {
     @State private var selectedMood: String = "😐"
     @FocusState private var isTitleFocused: Bool // Track focus for the title
     
+    // HIDDEN KEYBOARD TRICK STATE
+    @State private var customEmojiInput: String = ""
+    @FocusState private var isEmojiKeyboardFocused: Bool
+    
     // OPTIMIZATION: Computed property ensures math is done outside the UI redraw cycle
     var displayEmojis: [String] {
         var combined = [selectedMood] // Guarantee active mood is always visible first
@@ -161,9 +178,10 @@ struct JournalEditorView: View {
                                 .contentShape(Circle())
                             }
                             
-                            // 2. THE '+' PLACEHOLDER
+                            // 2. THE '+' PLACEHOLDER (Triggers Keyboard)
                             Button(action: {
-                                // Keyboard trigger logic will go here in Step 4
+                                customEmojiInput = "" // Clear previous input
+                                isEmojiKeyboardFocused = true // Summon Keyboard
                             }) {
                                 Image(systemName: "plus")
                                     .font(.title2)
@@ -174,6 +192,21 @@ struct JournalEditorView: View {
                             }
                             .buttonStyle(.plain)
                             .contentShape(Circle())
+                            // The invisible text field that forces the keyboard open
+                            .background(
+                                TextField("", text: $customEmojiInput)
+                                    .focused($isEmojiKeyboardFocused)
+                                    .opacity(0)
+                                    .frame(width: 0, height: 0)
+                                    // Intercept the typing instantly
+                                    .onChange(of: customEmojiInput) { _, newValue in
+                                        if let firstChar = newValue.first {
+                                            withAnimation(.snappy) { selectedMood = String(firstChar) }
+                                            isEmojiKeyboardFocused = false // Dismiss keyboard
+                                            customEmojiInput = ""
+                                        }
+                                    }
+                            )
                         }
                         .padding(.horizontal, 20) // Aligns with default Form padding
                         .padding(.vertical, 8)
