@@ -6,26 +6,30 @@
 //
 
 import SwiftUI
-import SwiftData
 
 // MARK: - APP ENTRY POINT
 struct ContentView: View {
+    @State private var selectedTab: Int = 0
+
     var body: some View {
-        TabView {
-            TaskListView()
+        TabView(selection: $selectedTab) {
+            TaskListView(switchToFocusTab: { selectedTab = 1 })
                 .tabItem {
                     Label("Tasks", systemImage: "checkmark.circle.fill")
                 }
-            
+                .tag(0)
+
             FocusTimerView()
                 .tabItem {
                     Label("Focus", systemImage: "timer")
                 }
-            
+                .tag(1)
+
             JournalView()
                 .tabItem {
                     Label("Journal", systemImage: "book.fill")
                 }
+                .tag(2)
         }
         .tint(.cardinalRed)
     }

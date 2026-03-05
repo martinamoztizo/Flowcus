@@ -6,11 +6,11 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - 1. CUSTOM WAVE SHAPE
+// MARK: - Wave Shape
 struct Wave: Shape {
     var offset: Angle
     var percent: Double
-    
+
     var animatableData: AnimatablePair<Double, Double> {
         get { AnimatablePair(offset.degrees, percent) }
         set {
@@ -18,62 +18,72 @@ struct Wave: Shape {
             percent = newValue.second
         }
     }
-    
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let waveHeight = 0.025 * rect.height
         let yOffset = rect.height * (1.0 - CGFloat(percent))
-        
+
         path.move(to: CGPoint(x: 0, y: yOffset))
-        
+
         for x in stride(from: 0, to: rect.width, by: 2) {
             let relativeX = x / rect.width
             let sine = sin(relativeX * 3 * .pi + offset.radians)
             let y = yOffset + (sine * waveHeight)
             path.addLine(to: CGPoint(x: x, y: y))
         }
-        
+
         path.addLine(to: CGPoint(x: rect.width, y: rect.height))
         path.addLine(to: CGPoint(x: 0, y: rect.height))
         path.closeSubpath()
-        
+
         return path
     }
 }
 
-// MARK: - 2. FOCUS TIMER VIEW (FINAL STATUS BAR LOGIC)
+// MARK: - Focus Timer View
 struct FocusTimerView: View {
     @StateObject private var timerManager = TimeManager()
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.colorScheme) var colorScheme
-    
+    @Environment(\.modelContext) private var modelContext
+
     // PERMANENT SETTINGS
     @AppStorage("workMinutes") private var defaultWorkTime = 25
     @AppStorage("shortBreakMinutes") private var shortBreakTime = 5
     @AppStorage("longBreakMinutes") private var longBreakTime = 15
     @AppStorage("sessionCount") private var sessionCount = 0
     @AppStorage("totalXP") private var totalXP = 0
-    
+
     // PERSIST MODE (Safe String Storage)
     @AppStorage("selectedModeRaw") private var selectedModeRaw: String = TimerMode.focus.rawValue
-    
+    @AppStorage("activeTaskID") private var activeTaskID: String = ""
+
     var selectedMode: TimerMode {
         get { TimerMode(rawValue: selectedModeRaw) ?? .focus }
         nonmutating set { selectedModeRaw = newValue.rawValue }
     }
-    
+
     @State private var showingSettings = false
+    @State private var activeTask: TaskItem? = nil
+    @State private var showTaskPicker = false
+    @State private var shouldStartAfterPicker = false
+    @State private var showMoodPrompt = false
+    @State private var completedTask: TaskItem? = nil
+    @State private var completedDuration: Int = 0
+    @State private var showStopConfirmation = false
+
     let modes = TimerMode.allCases
     private let focusSessionXP = 25
-    
+
     var isPaused: Bool {
         return !timerManager.isRunning && timerManager.timeRemaining < timerManager.initialTime && timerManager.timeRemaining > 0
     }
-    
+
     var isSessionActive: Bool {
         return timerManager.isRunning || isPaused
     }
-    
+
     // Height Logic: 1.03 buffer for full screen coverage
     var liquidHeightPercentage: Double {
         if !isSessionActive { return 0.0 }
@@ -81,7 +91,7 @@ struct FocusTimerView: View {
         let rawPercent = timerManager.timeRemaining / timerManager.initialTime
         return min(rawPercent * 1.03, 1.03)
     }
-    
+
     // MARK: - DYNAMIC COLORS
     var themeColors: [Color] {
         switch selectedMode {
@@ -93,10 +103,7 @@ struct FocusTimerView: View {
             return [Color.red.opacity(0.9), Color.red.opacity(0.7)]
         }
     }
-    
-    // Content Text Color (Timer numbers)
-    // Session Active -> Always White (on Black BG)
-    // Session Stopped -> Adaptive (Black in Light Mode, White in Dark Mode)
+
     var contentColor: Color {
         if isSessionActive {
             return .white
@@ -104,10 +111,7 @@ struct FocusTimerView: View {
             return colorScheme == .dark ? .white : .black
         }
     }
-    
-    // Background Color Logic
-    // Session Active -> Always Black (The Void)
-    // Session Stopped -> Adaptive (White in Light Mode, Black in Dark Mode)
+
     var backgroundColor: Color {
         if isSessionActive {
             return .black
@@ -115,14 +119,10 @@ struct FocusTimerView: View {
             return colorScheme == .dark ? .black : .white
         }
     }
-    
-    // MARK: - STATUS BAR LOGIC (USER REQUEST)
-    // We use preferredColorScheme to force Dark Mode (White Status Bar) when session is active
+
     var preferredScheme: ColorScheme? {
-        if isSessionActive {
-            return .dark // Forces white status bar text + black background
-        }
-        return nil // Follow system
+        if isSessionActive { return .dark }
+        return nil
     }
 
     var body: some View {
@@ -132,49 +132,43 @@ struct FocusTimerView: View {
                 backgroundColor
                     .ignoresSafeArea()
                     .animation(.easeInOut(duration: 0.5), value: isSessionActive)
-                
+
                 // 2. CONTINUOUS LIQUID WAVES
                 GeometryReader { geo in
                     ZStack(alignment: .bottom) {
                         TimelineView(.animation) { timeline in
                             let time = timeline.date.timeIntervalSinceReferenceDate
-                            
+
                             ZStack(alignment: .bottom) {
-                                // Wave 1 (Back Layer) - ALWAYS FULL
                                 Wave(offset: Angle(degrees: time * 50), percent: 1.1)
                                     .fill(themeColors[1])
                                     .ignoresSafeArea()
-                                
-                                // Wave 2 (Front Layer) - ALWAYS FULL
+
                                 Wave(offset: Angle(degrees: time * 70 + 90), percent: 1.1)
                                     .fill(themeColors[0])
                                     .ignoresSafeArea()
                             }
                         }
                     }
-                    // ANIMATE POSITION instead of shape morphing
-                    // When liquidHeightPercentage is 0, offset is full height (hidden at bottom)
-                    // When liquidHeightPercentage is 1.1, offset is 0 (full screen)
                     .offset(y: geo.size.height * (1.1 - liquidHeightPercentage))
                     .animation(.spring(response: 2.0, dampingFraction: 1.0), value: liquidHeightPercentage)
                 }
                 .ignoresSafeArea(.all)
-                
+
                 // 3. CONTENT OVERLAY
                 VStack(spacing: 0) {
                     Spacer()
-                    
-                    // TIMER TEXT
+
                     TimerDisplayView(
                         timeString: timerManager.timeString,
                         isPaused: isPaused,
                         contentColor: contentColor,
+                        activeTaskTitle: selectedMode == .focus ? activeTask?.title : nil,
                         onTap: handleTap
                     )
-                    
+
                     Spacer()
-                    
-                    // CONTROLS
+
                     TimerControlsView(
                         isRunning: timerManager.isRunning,
                         isPaused: isPaused,
@@ -186,24 +180,24 @@ struct FocusTimerView: View {
                         contentColor: contentColor,
                         themeColor: themeColors[0],
                         onTapRunning: handleTap,
-                        onStop: stopTimer,
+                        onStop: { showStopConfirmation = true },
                         onStart: {
-                            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                                timerManager.start()
-                                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                            // Show task picker first if in focus mode and no task selected
+                            if selectedMode == .focus && activeTask == nil {
+                                showTaskPicker = true
+                            } else {
+                                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                                    timerManager.start()
+                                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                                }
                             }
                         }
                     )
                 }
             }
-            // HIDES TAB BAR WHEN RUNNING
             .toolbar(timerManager.isRunning ? .hidden : .visible, for: .tabBar)
             .animation(.easeInOut, value: timerManager.isRunning)
-            // FORCE DARK MODE WHEN ACTIVE (Fixes Status Bar to White)
             .preferredColorScheme(preferredScheme)
-
-            
-            // TOOLBAR
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     if !isSessionActive {
@@ -216,6 +210,41 @@ struct FocusTimerView: View {
             .sheet(isPresented: $showingSettings) {
                 SettingsView().onDisappear { updateTimerForMode(selectedMode) }
             }
+            .sheet(isPresented: $showTaskPicker, onDismiss: {
+                if shouldStartAfterPicker {
+                    shouldStartAfterPicker = false
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                        timerManager.start()
+                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                    }
+                }
+            }) {
+                TaskPickerSheetView(activeTask: $activeTask, shouldStart: $shouldStartAfterPicker)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+            .alert("End this session?", isPresented: $showStopConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("End Session", role: .destructive) {
+                    stopTimer()
+                    activeTask = nil
+                    activeTaskID = ""
+                }
+            }
+            .sheet(isPresented: $showMoodPrompt) {
+                SessionMoodPromptView(
+                    task: completedTask,
+                    durationMinutes: completedDuration,
+                    onSelect: { emoji in
+                        logJournalEntry(emoji: emoji)
+                        showMoodPrompt = false
+                    },
+                    onSkip: { showMoodPrompt = false }
+                )
+                .presentationDetents([.height(320)])
+                .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled()
+            }
             .onChange(of: timerManager.completionEvents) { _, _ in
                 completeSession()
             }
@@ -223,18 +252,21 @@ struct FocusTimerView: View {
                 if newPhase == .active { timerManager.appMovedToForeground() }
                 if newPhase == .background { timerManager.appMovedToBackground() }
             }
-            // Sync logic when mode changes from controls
             .onChange(of: selectedMode) { _, newMode in
                  if !timerManager.isRunning { updateTimerForMode(newMode) }
             }
             .onAppear {
                 if !timerManager.isRunning { updateTimerForMode(selectedMode) }
+                loadActiveTaskFromStorage()
+            }
+            .onChange(of: activeTaskID) { _, _ in
+                loadActiveTaskFromStorage()
             }
         }
     }
-    
+
     // MARK: - LOGIC
-    
+
     private func handleTap() {
         if timerManager.isRunning {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
@@ -248,7 +280,7 @@ struct FocusTimerView: View {
             }
         }
     }
-    
+
     private func stopTimer() {
         withAnimation(.spring(response: 0.8, dampingFraction: 0.8)) {
             timerManager.pause()
@@ -256,35 +288,148 @@ struct FocusTimerView: View {
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
-    
+
     private func completeSession() {
         timerManager.pause()
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-        
+
         withAnimation {
             if selectedMode == .focus {
                 totalXP += focusSessionXP
                 sessionCount += 1
+
+                // Capture task info for post-session prompt
+                completedTask = activeTask
+                completedDuration = Int(timerManager.initialTime / 60)
+
+                // Update streak and cumulative focus time on the task
+                if let task = activeTask {
+                    updateTaskStreak(task, minutes: defaultWorkTime)
+                }
+
+                // Cycle to next mode
                 if sessionCount >= 2 {
                     selectedMode = .longBreak
-                    sessionCount = 0 // Reset after long break trigger
+                    sessionCount = 0
                 } else {
                     selectedMode = .shortBreak
                 }
+
+                // Tier XP bonuses — check if completing this task cleared a full runway tier
+                awardRunwayBonuses()
+
+                // Clear active task and show mood prompt
+                activeTask = nil
+                activeTaskID = ""
+                showMoodPrompt = true
             } else {
-                // Return to Focus after any break
                 selectedMode = .focus
             }
             updateTimerForMode(selectedMode)
         }
     }
-    
+
+    private func updateTaskStreak(_ task: TaskItem, minutes: Int) {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        if let lastDate = task.lastFocusedDate {
+            let lastDay = calendar.startOfDay(for: lastDate)
+            let diff = calendar.dateComponents([.day], from: lastDay, to: today).day ?? 0
+            if diff == 1 {
+                task.focusStreak += 1      // consecutive day — extend streak
+            } else if diff > 1 {
+                task.focusStreak = 1       // gap — restart streak
+            }
+            // diff == 0: same day, keep current streak value
+        } else {
+            task.focusStreak = 1           // first focus session on this task
+        }
+
+        task.lastFocusedDate = Date()
+        task.totalFocusMinutes += minutes
+    }
+
+    private func logJournalEntry(emoji: String) {
+        let taskName = completedTask?.title ?? "a focus session"
+        let duration = completedDuration
+        let content = "Completed a \(duration)-minute focus session on: \(taskName)"
+        let entry = JournalEntry(title: "Focus Session", content: content, mood: emoji)
+        modelContext.insert(entry)
+    }
+
     private func updateTimerForMode(_ mode: TimerMode) {
         guard !timerManager.isRunning else { return }
         switch mode {
-        case .focus: timerManager.setDuration(minutes: defaultWorkTime)
+        case .focus:
+            // Use tier-appropriate duration if an active task has a runway tier
+            if let task = activeTask, task.runwayTier == .small {
+                timerManager.setDuration(minutes: 5)
+            } else {
+                timerManager.setDuration(minutes: defaultWorkTime)
+            }
         case .shortBreak: timerManager.setDuration(minutes: shortBreakTime)
         case .longBreak: timerManager.setDuration(minutes: longBreakTime)
+        }
+    }
+
+    private func awardRunwayBonuses() {
+        guard let task = completedTask, task.runwayTier != .none else { return }
+
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        // Fetch today's runway tasks to check tier completion
+        let tier = task.runwayTier
+        let tierRaw = tier.rawValue
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate {
+            $0.scheduledDate >= startOfDay && $0.scheduledDate < endOfDay
+            && $0.runwayTierRaw == tierRaw
+        })
+
+        guard let tierTasks = try? modelContext.fetch(descriptor) else { return }
+        let allDone = tierTasks.allSatisfy { $0.isCompleted }
+
+        if allDone {
+            switch tier {
+            case .small: totalXP += 10
+            case .medium: totalXP += 25
+            case .big: totalXP += 50
+            case .none: break
+            }
+
+            // Check if entire runway is complete
+            let allTiersRaw = RunwayTier.tiers.map(\.rawValue)
+            let allRunwayDescriptor = FetchDescriptor<TaskItem>(predicate: #Predicate {
+                $0.scheduledDate >= startOfDay && $0.scheduledDate < endOfDay
+                && allTiersRaw.contains($0.runwayTierRaw)
+            })
+            if let allRunway = try? modelContext.fetch(allRunwayDescriptor),
+               !allRunway.isEmpty,
+               allRunway.allSatisfy({ $0.isCompleted }) {
+                totalXP += 100
+            }
+        }
+    }
+
+    /// Load active task from persisted createdAt timestamp
+    private func loadActiveTaskFromStorage() {
+        guard !activeTaskID.isEmpty, activeTask == nil else { return }
+        guard let interval = Double(activeTaskID) else { return }
+        let targetDate = Date(timeIntervalSinceReferenceDate: interval)
+        // Small window around the exact timestamp for floating-point safety
+        let lo = targetDate.addingTimeInterval(-0.001)
+        let hi = targetDate.addingTimeInterval(0.001)
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate {
+            $0.createdAt >= lo && $0.createdAt <= hi
+        })
+        if let task = try? modelContext.fetch(descriptor).first {
+            activeTask = task
+            // Apply tier-appropriate duration
+            if selectedMode == .focus {
+                updateTimerForMode(.focus)
+            }
         }
     }
 }
@@ -294,10 +439,23 @@ struct TimerDisplayView: View {
     let timeString: String
     let isPaused: Bool
     let contentColor: Color
+    var activeTaskTitle: String? = nil
     let onTap: () -> Void
-    
+
     var body: some View {
         VStack(spacing: 10) {
+            // Active task label above timer
+            if let title = activeTaskTitle {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(contentColor.opacity(0.75))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 40)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             Text(timeString)
                 .font(.system(size: 95, weight: .bold, design: .rounded))
                 .monospacedDigit()
@@ -305,7 +463,7 @@ struct TimerDisplayView: View {
                 .contentTransition(.numericText())
                 .shadow(color: contentColor == .white ? .black.opacity(0.2) : .clear, radius: 10, x: 0, y: 5)
                 .animation(.easeIn(duration: 0.3), value: contentColor)
-            
+
             if isPaused {
                 Text("Tap to Resume")
                     .font(.headline)
@@ -330,7 +488,7 @@ struct TimerControlsView: View {
     let onTapRunning: () -> Void
     let onStop: () -> Void
     let onStart: () -> Void
-    
+
     var body: some View {
         ZStack(alignment: .bottom) {
             if !isRunning {
@@ -346,7 +504,7 @@ struct TimerControlsView: View {
                         .colorScheme(contentColor == .white ? .dark : .light)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    
+
                     if isPaused {
                         Button(action: onStop) {
                             Text("Stop Session")
@@ -374,7 +532,6 @@ struct TimerControlsView: View {
                 .padding(.bottom, 50)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
-                // Tap Area while running
                 Color.clear.contentShape(Rectangle()).frame(height: 150)
                     .onTapGesture { onTapRunning() }
                 Text("Tap screen to pause")
@@ -384,212 +541,144 @@ struct TimerControlsView: View {
     }
 }
 
-// MARK: - SETTINGS VIEW
-struct TimerPreset: Identifiable {
-    let id = UUID()
-    let name: String
-    let focus: Int
-    let short: Int
-    let long: Int
-}
+// MARK: - TASK PICKER SHEET
+struct TaskPickerSheetView: View {
+    @Binding var activeTask: TaskItem?
+    @Binding var shouldStart: Bool
+    @Environment(\.dismiss) private var dismiss
+    @Query private var todayTasks: [TaskItem]
 
-let timerPresets = [
-    TimerPreset(name: "Classic", focus: 25, short: 5, long: 15),
-    TimerPreset(name: "Extended", focus: 50, short: 10, long: 20),
-    TimerPreset(name: "Science", focus: 52, short: 17, long: 20),
-    TimerPreset(name: "Deep", focus: 90, short: 20, long: 30)
-]
-
-struct SettingsView: View {
-    @Environment(\.dismiss) var dismiss
-    
-    @AppStorage("workMinutes") private var defaultWorkTime = 25
-    @AppStorage("shortBreakMinutes") private var shortBreakTime = 5
-    @AppStorage("longBreakMinutes") private var longBreakTime = 15
-    
-    @State private var activeSetting: SettingType?
-    
-    enum SettingType: Identifiable {
-        case work, shortBreak, longBreak
-        var id: Self { self }
-        var title: String {
-            switch self {
-            case .work: return "Focus Duration"
-            case .shortBreak: return "Short Break"
-            case .longBreak: return "Long Break"
-            }
-        }
+    init(activeTask: Binding<TaskItem?>, shouldStart: Binding<Bool>) {
+        self._activeTask = activeTask
+        self._shouldStart = shouldStart
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: Date())
+        let end = calendar.date(byAdding: .day, value: 1, to: start)!
+        _todayTasks = Query(
+            filter: #Predicate<TaskItem> { task in
+                task.scheduledDate >= start && task.scheduledDate < end && !task.isCompleted
+            },
+            sort: \TaskItem.createdAt,
+            order: .reverse
+        )
     }
-    
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    Button(action: { activeSetting = .work }) {
-                        HStack {
-                            Text("Focus Duration").foregroundStyle(.primary)
-                            Spacer()
-                            Text("\(defaultWorkTime) min").foregroundStyle(.cardinalRed)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("What are you focusing on?")
+                    .font(.title2).fontWeight(.bold)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 24)
+                    .padding(.bottom, 16)
+
+                if todayTasks.isEmpty {
+                    ContentUnavailableView(
+                        "No Tasks Today",
+                        systemImage: "checkmark.circle",
+                        description: Text("Add tasks in the Tasks tab, or start without one.")
+                    )
+                    .frame(maxHeight: .infinity)
+                } else {
+                    List(todayTasks, id: \.persistentModelID) { task in
+                        Button {
+                            activeTask = task
+                            shouldStart = true
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "circle")
+                                    .foregroundStyle(.secondary)
+                                Text(task.title)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                // Show streak flame if applicable
+                                if task.focusStreak >= 2 {
+                                    Label("\(task.focusStreak)", systemImage: "flame.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                }
+                            }
                         }
                     }
-                    Button(action: { activeSetting = .shortBreak }) {
-                        HStack {
-                            Text("Short Break").foregroundStyle(.primary)
-                            Spacer()
-                            Text("\(shortBreakTime) min").foregroundStyle(.cardinalRed)
-                        }
-                    }
-                    Button(action: { activeSetting = .longBreak }) {
-                        HStack {
-                            Text("Long Break").foregroundStyle(.primary)
-                            Spacer()
-                            Text("\(longBreakTime) min").foregroundStyle(.cardinalRed)
-                        }
-                    }
+                    .listStyle(.plain)
                 }
-                
-                Section {
-                    Text("Selecting a standard duration will automatically update your setup.")
-                        .font(.caption).foregroundStyle(.secondary)
+
+                // Skip option
+                Button {
+                    activeTask = nil
+                    shouldStart = true
+                    dismiss()
+                } label: {
+                    Text("Start without a task")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
                 }
             }
-            .navigationTitle("Timer Settings")
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-            }
-            .sheet(item: $activeSetting) { setting in
-                TimePickerSheet(title: setting.title, value: binding(for: setting), presetValues: getPresets(for: setting))
-                    .presentationDetents([.height(250)])
-                    .presentationCornerRadius(25)
-            }
-            .onAppear {
-                defaultWorkTime = clampedDuration(defaultWorkTime)
-                shortBreakTime = clampedDuration(shortBreakTime)
-                longBreakTime = clampedDuration(longBreakTime)
-            }
-            // AUTO-UPDATE LOGIC
-            .onChange(of: defaultWorkTime) { _, newValue in
-                defaultWorkTime = clampedDuration(newValue)
-                if let preset = matchingPreset(for: .work, value: defaultWorkTime) {
-                    applyPreset(preset)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cancel") { dismiss() }
                 }
             }
-            .onChange(of: shortBreakTime) { _, newValue in
-                shortBreakTime = clampedDuration(newValue)
-                if let preset = matchingPreset(for: .shortBreak, value: shortBreakTime) {
-                    applyPreset(preset)
-                }
-            }
-            .onChange(of: longBreakTime) { _, newValue in
-                longBreakTime = clampedDuration(newValue)
-                if let preset = matchingPreset(for: .longBreak, value: longBreakTime) {
-                    applyPreset(preset)
-                }
-            }
-        }
-    }
-    
-    private func getPresets(for setting: SettingType) -> [Int] {
-        switch setting {
-        case .work: return timerPresets.map(\.focus)
-        case .shortBreak: return timerPresets.map(\.short)
-        case .longBreak: return Array(Set(timerPresets.map(\.long))).sorted()
-        }
-    }
-    
-    private func binding(for setting: SettingType) -> Binding<Int> {
-        switch setting {
-        case .work: return $defaultWorkTime
-        case .shortBreak: return $shortBreakTime
-        case .longBreak: return $longBreakTime
-        }
-    }
-
-    private func clampedDuration(_ value: Int) -> Int {
-        min(max(value, TimeManager.minDurationMinutes), TimeManager.maxDurationMinutes)
-    }
-
-    private func applyPreset(_ preset: TimerPreset) {
-        if defaultWorkTime != preset.focus { defaultWorkTime = preset.focus }
-        if shortBreakTime != preset.short { shortBreakTime = preset.short }
-        if longBreakTime != preset.long { longBreakTime = preset.long }
-    }
-
-    private func matchingPreset(for setting: SettingType, value: Int) -> TimerPreset? {
-        switch setting {
-        case .work:
-            return timerPresets.first(where: { $0.focus == value })
-        case .shortBreak:
-            return timerPresets.first(where: { $0.short == value })
-        case .longBreak:
-            return timerPresets.first(where: { $0.long == value && ($0.focus == defaultWorkTime || $0.short == shortBreakTime) })
-                ?? timerPresets.first(where: { $0.long == value })
         }
     }
 }
 
-// MARK: - CUSTOM PICKER SHEET
-struct TimePickerSheet: View {
-    let title: String
-    @Binding var value: Int
-    let presetValues: [Int]
-    @Environment(\.dismiss) var dismiss
-    
-    @State private var isCustomMode = false
-    @State private var customInputText = ""
-    @FocusState private var isInputFocused: Bool
-    
+// MARK: - POST-SESSION MOOD PROMPT
+struct SessionMoodPromptView: View {
+    let task: TaskItem?
+    let durationMinutes: Int
+    let onSelect: (String) -> Void
+    let onSkip: () -> Void
+
+    private let moodEmojis = ["🔥", "😊", "😤", "😐", "😫", "🧠", "⚡️", "😴"]
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(title).font(.headline)
-                Spacer()
-                Button("Done") {
-                    if isCustomMode, let newValue = Int(customInputText) {
-                        value = min(max(newValue, TimeManager.minDurationMinutes), TimeManager.maxDurationMinutes)
-                    }
-                    dismiss()
-                }
-                .fontWeight(.bold)
-            }
-            .padding().background(Color(.systemGray6))
-            
-            VStack(spacing: 10) {
-                if isCustomMode {
-                    // CUSTOM TEXT INPUT
-                    VStack(spacing: 20) {
-                        Text("Enter Minutes").font(.subheadline).foregroundStyle(.secondary)
-                        TextField("e.g. 90", text: $customInputText)
-                            .font(.system(size: 40, weight: .bold))
-                            .multilineTextAlignment(.center)
-                            .keyboardType(.numberPad)
-                                 .focused($isInputFocused)
-                            .onAppear { 
-                                customInputText = "\(value)"
-                                isInputFocused = true 
-                            }
-                        Button("Switch to Wheel") { withAnimation { isCustomMode = false } }
-                            .font(.caption).foregroundStyle(.cardinalRed)
-                    }
-                    .padding(.top, 20).transition(.opacity)
+        VStack(spacing: 24) {
+            VStack(spacing: 6) {
+                Text("Session complete! 🎉")
+                    .font(.title3).fontWeight(.bold)
+                if let title = task?.title {
+                    Text("You focused on \"\(title)\" for \(durationMinutes) min")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
                 } else {
-                    // RESTRICTED WHEEL
-                    VStack(spacing: 0) {
-                        Picker("Time", selection: $value) {
-                            ForEach(presetValues, id: \.self) { min in 
-                                Text("\(min) min").tag(min) 
-                            }
-                        }
-                        .pickerStyle(.wheel)
-                        .padding(.horizontal)
-                        
-                        Button("Enter Custom Amount") { withAnimation { isCustomMode = true } }
-                            .font(.subheadline).foregroundStyle(.cardinalRed).padding(.bottom, 5)
-                    }
-                    .transition(.opacity)
+                    Text("\(durationMinutes) minutes of focused work")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
             }
-            Spacer()
+            .padding(.top, 28)
+
+            VStack(spacing: 12) {
+                Text("How did that feel?")
+                    .font(.headline)
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 12) {
+                    ForEach(moodEmojis, id: \.self) { emoji in
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            onSelect(emoji)
+                        } label: {
+                            Text(emoji)
+                                .font(.system(size: 32))
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+
+            Button(action: onSkip) {
+                Text("Skip")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 8)
         }
+        .frame(maxWidth: .infinity)
     }
 }

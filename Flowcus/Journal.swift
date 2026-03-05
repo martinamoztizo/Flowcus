@@ -6,7 +6,7 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - 3. JOURNAL VIEW (TITLE SUPPORT)
+// MARK: - Journal View
 struct JournalView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \JournalEntry.timestamp, order: .reverse) private var entries: [JournalEntry]
@@ -89,9 +89,12 @@ struct JournalView: View {
                 .onDelete(perform: deleteEntries)
             }
             .navigationTitle("Brain Dump")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showingAddSheet = true }) { Image(systemName: "square.and.pencil") }
+                    Button(action: { showingAddSheet = true }) {
+                        Image(systemName: "square.and.pencil")
+                    }
                 }
             }
             // Sheet for ADDING (entry is nil)
@@ -103,13 +106,23 @@ struct JournalView: View {
                 JournalEditorView(entry: entry, recommendedEmojis: topEmojis)
             }
             .overlay {
-                if entries.isEmpty { ContentUnavailableView("Empty Journal", systemImage: "book", description: Text("Write down your progress.")) }
+                if entries.isEmpty {
+                    ContentUnavailableView(
+                        "Empty Journal",
+                        systemImage: "book",
+                        description: Text("Write down your progress.")
+                    )
+                }
             }
         }
     }
     
     private func deleteEntries(offsets: IndexSet) {
-        withAnimation { for index in offsets { modelContext.delete(entries[index]) } }
+        withAnimation {
+            for index in offsets {
+                modelContext.delete(entries[index])
+            }
+        }
     }
 }
 
@@ -124,12 +137,11 @@ struct JournalEditorView: View {
     
     @State private var title: String = ""
     @State private var text: String = ""
-    @State private var selectedMood: String = "😐"
+    @State private var selectedMood: String = JournalEntry.defaultMood
     @FocusState private var isTitleFocused: Bool // Track focus for the title
     
-    // HIDDEN KEYBOARD TRICK STATE
-    @State private var customEmojiInput: String = ""
-    @FocusState private var isEmojiKeyboardFocused: Bool
+    // EMOJI PICKER STATE
+    @State private var showEmojiPicker = false
     
     // OPTIMIZATION: Computed property ensures math is done outside the UI redraw cycle
     var displayEmojis: [String] {
@@ -143,80 +155,70 @@ struct JournalEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Editable Large Title Area
+                // Editable Title Area
                 ZStack(alignment: .leading) {
                     if title.isEmpty && !isTitleFocused {
                         Text("New Entry")
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(.primary) // 100% Opacity
+                            .font(.title.bold())
+                            .foregroundStyle(.primary)
                     }
-                    
+
                     TextField("", text: $title)
-                        .font(.largeTitle.bold())
+                        .font(.title.bold())
                         .focused($isTitleFocused)
                         .foregroundStyle(.primary)
                 }
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 10, leading: 20, bottom: 10, trailing: 20))
-                
-                Section("Mood") {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            // 1. THE SMART LIST
-                            ForEach(displayEmojis, id: \.self) { mood in
-                                Button(action: {
-                                    withAnimation(.snappy) { selectedMood = mood }
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                }) {
-                                    Text(mood)
-                                        .font(.largeTitle)
-                                        .frame(width: 50, height: 50)
-                                        .background(selectedMood == mood ? Color.cardinalRed.opacity(0.15) : Color.clear)
-                                        .clipShape(Circle())
-                                }
-                                .buttonStyle(.plain)
-                                .contentShape(Circle())
-                            }
-                            
-                            // 2. THE '+' PLACEHOLDER (Triggers Keyboard)
+                .listRowInsets(EdgeInsets(top: 2, leading: 20, bottom: 0, trailing: 20))
+
+                // Mood Bar
+                Section {
+                    HStack(spacing: 8) {
+                        // 1. THE SMART LIST
+                        ForEach(displayEmojis, id: \.self) { mood in
                             Button(action: {
-                                customEmojiInput = "" // Clear previous input
-                                isEmojiKeyboardFocused = true // Summon Keyboard
+                                withAnimation(.snappy) { selectedMood = mood }
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             }) {
-                                Image(systemName: "plus")
-                                    .font(.title2)
-                                    .foregroundStyle(.gray)
-                                    .frame(width: 50, height: 50)
-                                    .background(Color(.systemGray6))
+                                Text(mood)
+                                    .font(.title3)
+                                    .frame(width: 36, height: 36)
+                                    .background(selectedMood == mood ? Color.cardinalRed.opacity(0.15) : Color.clear)
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
                             .contentShape(Circle())
-                            // The invisible text field that forces the keyboard open
-                            .background(
-                                TextField("", text: $customEmojiInput)
-                                    .focused($isEmojiKeyboardFocused)
-                                    .opacity(0)
-                                    .frame(width: 0, height: 0)
-                                    // Intercept the typing instantly
-                                    .onChange(of: customEmojiInput) { _, newValue in
-                                        if let firstChar = newValue.first {
-                                            withAnimation(.snappy) { selectedMood = String(firstChar) }
-                                            isEmojiKeyboardFocused = false // Dismiss keyboard
-                                            customEmojiInput = ""
-                                        }
-                                    }
-                            )
                         }
-                        .padding(.horizontal, 20) // Aligns with default Form padding
-                        .padding(.vertical, 8)
+
+                        // 2. THE '+' BUTTON (Opens Emoji Picker)
+                        Button(action: { showEmojiPicker = true }) {
+                            Image(systemName: "plus")
+                                .font(.body)
+                                .foregroundStyle(.gray)
+                                .frame(width: 36, height: 36)
+                                .background(Color(.systemGray6))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Circle())
+                        .popover(isPresented: $showEmojiPicker, arrowEdge: .top) {
+                            EmojiPickerView { emoji in
+                                withAnimation(.snappy) { selectedMood = emoji }
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                showEmojiPicker = false
+                            }
+                            .presentationCompactAdaptation(.popover)
+                        }
                     }
-                    .listRowInsets(EdgeInsets()) // Allows edge-to-edge scrolling
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                 }
-                
-                Section("Log") {
+
+                // Log
+                Section {
                     TextEditor(text: $text)
-                        .frame(minHeight: 250)
+                        .frame(minHeight: 400)
                         .overlay(alignment: .topLeading) {
                             if text.isEmpty {
                                 Text("Write your thoughts here...")
@@ -248,7 +250,7 @@ struct JournalEditorView: View {
                     // Start empty so the placeholder "New Entry" shows and disappears on type
                     title = ""
                     // Default to their #1 most used emoji instead of a hardcoded "😐"
-                    selectedMood = recommendedEmojis.first ?? "😐"
+                    selectedMood = recommendedEmojis.first ?? JournalEntry.defaultMood
                 }
             }
         }
@@ -264,6 +266,52 @@ struct JournalEditorView: View {
             // Create New
             modelContext.insert(JournalEntry(title: title, content: text, mood: selectedMood))
         }
+    }
+}
+
+// MARK: - EMOJI PICKER VIEW
+struct EmojiPickerView: View {
+    let onSelect: (String) -> Void
+    @State private var selectedCategory = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Category tab bar
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(emojiCategories.indices, id: \.self) { index in
+                        Button {
+                            withAnimation(.snappy) { selectedCategory = index }
+                        } label: {
+                            Image(systemName: emojiCategories[index].symbol)
+                                .font(.caption)
+                                .padding(8)
+                                .foregroundStyle(selectedCategory == index ? Color.cardinalRed : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+            }
+            .frame(height: 36)
+
+            Divider()
+
+            // Grid for active category only
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 44))], spacing: 4) {
+                    ForEach(emojiCategories[selectedCategory].emojis, id: \.self) { emoji in
+                        Text(emoji)
+                            .font(.title2)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                            .onTapGesture { onSelect(emoji) }
+                    }
+                }
+                .padding(8)
+            }
+        }
+        .frame(width: 300, height: 280)
     }
 }
 

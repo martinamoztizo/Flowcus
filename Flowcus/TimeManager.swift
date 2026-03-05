@@ -97,7 +97,7 @@ class TimeManager: ObservableObject {
     private func scheduleTimer() {
         timer?.invalidate()
         let newTimer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.tick()
+                self?.tick()
         }
         RunLoop.main.add(newTimer, forMode: .common)
         timer = newTimer
@@ -169,18 +169,12 @@ class TimeManager: ObservableObject {
     private func loadState() {
         if let data = UserDefaults.standard.data(forKey: stateKey),
            let decoded = try? JSONDecoder().decode(TimerState.self, from: data) {
-            self.state = decoded
-            updateUIFromState()
+            self.state = decoded  // didSet handles saveState() + updateUIFromState()
         }
     }
     
     // MARK: - FORMATTING
-    
-    var progress: Double {
-        guard initialTime > 0 else { return 1.0 }
-        return 1.0 - (timeRemaining / initialTime)
-    }
-    
+
     var timeString: String {
         let totalSeconds = Int(ceil(timeRemaining))
         let minutes = totalSeconds / 60
