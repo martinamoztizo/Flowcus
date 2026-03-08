@@ -74,7 +74,7 @@ struct SettingsView: View {
 
                 Section {
                     Text("Selecting a standard duration will automatically update your setup.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.appCaption).foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Timer Settings")
@@ -167,7 +167,7 @@ struct TimePickerSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(title).font(.headline)
+                Text(title).font(.appHeadline)
                 Spacer()
                 Button("Done") {
                     if isCustomMode, let newValue = Int(customInputText) {
@@ -183,9 +183,9 @@ struct TimePickerSheet: View {
                 if isCustomMode {
                     // CUSTOM TEXT INPUT
                     VStack(spacing: 20) {
-                        Text("Enter Minutes").font(.subheadline).foregroundStyle(.secondary)
+                        Text("Enter Minutes").font(.appSubhead).foregroundStyle(.secondary)
                         TextField("e.g. 90", text: $customInputText)
-                            .font(.system(size: 40, weight: .bold))
+                            .font(.appDisplay(size: 40))
                             .multilineTextAlignment(.center)
                             .keyboardType(.numberPad)
                                  .focused($isInputFocused)
@@ -194,7 +194,7 @@ struct TimePickerSheet: View {
                                 isInputFocused = true
                             }
                         Button("Switch to Wheel") { withAnimation { isCustomMode = false } }
-                            .font(.caption).foregroundStyle(.cardinalRed)
+                            .font(.appCaption).foregroundStyle(.cardinalRed)
                     }
                     .padding(.top, 20).transition(.opacity)
                 } else {
@@ -209,7 +209,7 @@ struct TimePickerSheet: View {
                         .padding(.horizontal)
 
                         Button("Enter Custom Amount") { withAnimation { isCustomMode = true } }
-                            .font(.subheadline).foregroundStyle(.cardinalRed).padding(.bottom, 5)
+                            .font(.appSubhead).foregroundStyle(.cardinalRed).padding(.bottom, 5)
                     }
                     .transition(.opacity)
                 }

@@ -81,10 +81,6 @@ struct RunwayView: View {
         !allRunwayTasks.isEmpty
     }
 
-    private var isDoingMode: Bool {
-        hasAnyRunwayTask && !isAllDone && completedRunwayTasks.count > 0
-    }
-
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -175,7 +171,7 @@ struct RunwayView: View {
             if incompleteTasks.count > 1 {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Up Next")
-                        .font(.caption)
+                        .font(.appCaption)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
@@ -185,7 +181,7 @@ struct RunwayView: View {
                         RunwayUpNextCard(task: task) {
                             // Promote to current by reordering
                             task.runwayOrder = -1
-                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            Haptics.impact(.medium)
                         } onLaunch: {
                             launchIntoFocus(task: task)
                         }
@@ -198,7 +194,7 @@ struct RunwayView: View {
             if !completedRunwayTasks.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Done")
-                        .font(.caption)
+                        .font(.appCaption)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
@@ -210,13 +206,13 @@ struct RunwayView: View {
                                 .foregroundStyle(.green)
                                 .font(.body)
                             Text(task.title)
-                                .font(.subheadline)
+                                .font(.appSubhead)
                                 .strikethrough()
                                 .foregroundStyle(.secondary)
                             Spacer()
                             if task.totalFocusMinutes > 0 {
                                 Text("\(task.totalFocusMinutes)m")
-                                    .font(.caption2)
+                                    .font(.appCaption2)
                                     .foregroundStyle(.tertiary)
                             }
                         }
@@ -243,17 +239,17 @@ struct RunwayView: View {
                     .foregroundStyle(.green)
 
                 Text("Runway Complete!")
-                    .font(.title2)
+                    .font(.appTitle2)
                     .fontWeight(.bold)
 
                 let totalMinutes = allRunwayTasks.reduce(0) { $0 + $1.totalFocusMinutes }
                 Text("You launched \(completedRunwayTasks.count) of \(allRunwayTasks.count) tasks")
-                    .font(.subheadline)
+                    .font(.appSubhead)
                     .foregroundStyle(.secondary)
 
                 if totalMinutes > 0 {
                     Text("\(totalMinutes) minutes of focused work")
-                        .font(.caption)
+                        .font(.appCaption)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -269,13 +265,13 @@ struct RunwayView: View {
                         .font(.caption)
                         .foregroundStyle(task.runwayTier.color)
                     Text(task.title)
-                        .font(.subheadline)
+                        .font(.appSubhead)
                         .strikethrough(task.isCompleted)
                         .foregroundStyle(task.isCompleted ? .secondary : .primary)
                     Spacer()
                     if task.totalFocusMinutes > 0 {
                         Text("\(task.totalFocusMinutes)m")
-                            .font(.caption2)
+                            .font(.appCaption2)
                             .foregroundStyle(.tertiary)
                     }
                     if task.isCompleted {
@@ -293,10 +289,10 @@ struct RunwayView: View {
             // Dump to Journal button
             Button {
                 dumpToJournal()
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Haptics.impact(.medium)
             } label: {
                 Label("Dump to Journal", systemImage: "book.fill")
-                    .font(.subheadline)
+                    .font(.appSubhead)
                     .fontWeight(.medium)
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
@@ -313,7 +309,7 @@ struct RunwayView: View {
 
     private func launchIntoFocus(task: TaskItem) {
         activeTaskID = String(task.createdAt.timeIntervalSinceReferenceDate)
-        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        Haptics.impact(.heavy)
         switchToFocusTab()
     }
 
@@ -365,16 +361,16 @@ struct RunwayTierSection: View {
                     .foregroundStyle(tier.color)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tier.displayTitle)
-                        .font(.subheadline)
+                        .font(.appSubhead)
                         .fontWeight(.bold)
                         .foregroundStyle(tier.color)
                     Text(tierSubtitle)
-                        .font(.caption2)
+                        .font(.appCaption2)
                         .foregroundStyle(tier.color.opacity(0.7))
                 }
                 Spacer()
                 Text("\(tasks.count)/\(tier.maxCount)")
-                    .font(.caption2)
+                    .font(.appCaption2)
                     .fontWeight(.semibold)
                     .foregroundStyle(tier.color.opacity(0.6))
             }
@@ -388,7 +384,7 @@ struct RunwayTierSection: View {
             if isAdding {
                 HStack(spacing: 6) {
                     TextField("New task...", text: $newTitle)
-                        .font(.subheadline)
+                        .font(.appSubhead)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .background(Color(.systemGray5))
@@ -413,16 +409,16 @@ struct RunwayTierSection: View {
                 HStack(spacing: 10) {
                     Button {
                         withAnimation(.easeOut(duration: 0.2)) { isAdding = true }
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        Haptics.impact(.light)
                     } label: {
                         Label("Add", systemImage: "plus")
-                            .font(.caption)
+                            .font(.appCaption)
                             .foregroundStyle(tier.color)
                     }
 
                     Button(action: onBacklog) {
                         Label("From backlog", systemImage: "tray.and.arrow.up")
-                            .font(.caption)
+                            .font(.appCaption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -479,7 +475,7 @@ struct RunwayTierSection: View {
         if tasks.count + 1 >= tier.maxCount {
             isAdding = false
         }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptics.impact(.light)
     }
 }
 
@@ -489,50 +485,43 @@ struct RunwayTaskCard: View {
     let task: TaskItem
     let tier: RunwayTier
     @Environment(\.modelContext) private var modelContext
-    @State private var checkScale: CGFloat = 1.0
 
     var body: some View {
         HStack(spacing: 10) {
-            // Checkbox
-            Button {
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
-                    checkScale = 1.3
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
-                        checkScale = 1.0
+            AnimatedCheckbox(
+                isCompleted: task.isCompleted,
+                font: tier == .big ? .title3 : .body,
+                checkedColor: .green,
+                uncheckedColor: tier.color.opacity(0.6),
+                onToggle: {
+                    task.isCompleted.toggle()
+                    if task.isCompleted {
+                        Haptics.impact(.heavy)
                     }
                 }
-                task.isCompleted.toggle()
-                if task.isCompleted {
-                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                }
-            } label: {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(tier == .big ? .title3 : .body)
-                    .foregroundStyle(task.isCompleted ? .green : tier.color.opacity(0.6))
-                    .scaleEffect(checkScale)
-            }
-            .buttonStyle(.plain)
+            )
 
-            Text(task.title)
-                .font(tier == .big ? .body : .subheadline)
-                .fontWeight(tier == .big ? .medium : .regular)
-                .strikethrough(task.isCompleted)
-                .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                .lineLimit(2)
+            InlineEditableText(
+                text: task.title,
+                font: tier == .big ? .appBody : .appSubhead,
+                fontWeight: tier == .big ? .medium : .regular,
+                isCompleted: task.isCompleted,
+                completedColor: .secondary,
+                lineLimit: 2,
+                onCommit: { task.title = $0 }
+            )
 
             Spacer()
 
             if task.totalFocusMinutes > 0 {
                 Text("\(task.totalFocusMinutes)m")
-                    .font(.caption2)
+                    .font(.appCaption2)
                     .foregroundStyle(.tertiary)
             }
 
             if task.focusStreak >= 2 {
                 Label("\(task.focusStreak)", systemImage: "flame.fill")
-                    .font(.caption2)
+                    .font(.appCaption2)
                     .foregroundStyle(.orange)
             }
         }
@@ -544,12 +533,11 @@ struct RunwayTaskCard: View {
         )
         .opacity(task.isCompleted ? 0.6 : 1.0)
         .contextMenu {
-            // Reassign tier
             ForEach(RunwayTier.tiers, id: \.self) { t in
                 if t != tier {
                     Button {
                         withAnimation { task.runwayTier = t }
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        Haptics.impact(.medium)
                     } label: {
                         Label("Move to \(t.displayTitle)", systemImage: t.icon)
                     }
@@ -558,7 +546,7 @@ struct RunwayTaskCard: View {
 
             Button {
                 withAnimation { task.runwayTier = .none }
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Haptics.impact(.medium)
             } label: {
                 Label("Remove from Runway", systemImage: "arrow.uturn.backward")
             }
@@ -588,21 +576,21 @@ struct RunwayHeroCard: View {
                 Image(systemName: task.runwayTier.icon)
                     .font(.caption)
                 Text(task.runwayTier.displayTitle)
-                    .font(.caption)
+                    .font(.appCaption)
                     .fontWeight(.semibold)
             }
             .foregroundStyle(task.runwayTier.color)
 
             // Task name
             Text(task.title)
-                .font(.title2)
+                .font(.appTitle2)
                 .fontWeight(.bold)
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
 
             if task.totalFocusMinutes > 0 {
                 Label("\(task.totalFocusMinutes) min focused", systemImage: "clock")
-                    .font(.caption)
+                    .font(.appCaption)
                     .foregroundStyle(.secondary)
             }
 
@@ -613,7 +601,7 @@ struct RunwayHeroCard: View {
                     Text("Launch into Focus")
                         .fontWeight(.semibold)
                 }
-                .font(.title3)
+                .font(.appTitle3)
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .background(task.runwayTier.color)
@@ -647,7 +635,7 @@ struct RunwayUpNextCard: View {
                 .foregroundStyle(task.runwayTier.color)
 
             Text(task.title)
-                .font(.subheadline)
+                .font(.appSubhead)
                 .lineLimit(1)
 
             Spacer()
@@ -685,7 +673,7 @@ struct GhostCarryoverSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text("Yesterday's unfinished")
-                    .font(.caption)
+                    .font(.appCaption)
                     .foregroundStyle(.secondary)
             }
 
@@ -696,7 +684,7 @@ struct GhostCarryoverSection: View {
                         .foregroundStyle(ghost.runwayTier.color.opacity(0.5))
 
                     Text(ghost.title)
-                        .font(.subheadline)
+                        .font(.appSubhead)
                         .foregroundStyle(.primary.opacity(0.4))
                         .lineLimit(1)
 
@@ -704,10 +692,10 @@ struct GhostCarryoverSection: View {
 
                     Button {
                         relaunchGhost(ghost)
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        Haptics.impact(.medium)
                     } label: {
                         Text("Relaunch")
-                            .font(.caption2)
+                            .font(.appCaption2)
                             .fontWeight(.medium)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
@@ -769,7 +757,7 @@ struct BacklogPickerSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Add to \(tier.displayTitle)")
-                    .font(.title3).fontWeight(.bold)
+                    .font(.appTitle3).fontWeight(.bold)
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
                     .padding(.bottom, 12)
@@ -784,7 +772,7 @@ struct BacklogPickerSheet: View {
                     List(availableTasks, id: \.persistentModelID) { task in
                         Button {
                             task.runwayTier = tier
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            Haptics.impact(.light)
                             dismiss()
                         } label: {
                             HStack(spacing: 12) {

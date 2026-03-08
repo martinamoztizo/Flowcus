@@ -43,8 +43,7 @@ struct Wave: Shape {
 
 // MARK: - Focus Timer View
 struct FocusTimerView: View {
-    @StateObject private var timerManager = TimeManager()
-    @Environment(\.scenePhase) var scenePhase
+    @EnvironmentObject private var timerManager: TimeManager
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.modelContext) private var modelContext
 
@@ -58,6 +57,13 @@ struct FocusTimerView: View {
     // PERSIST MODE (Safe String Storage)
     @AppStorage("selectedModeRaw") private var selectedModeRaw: String = TimerMode.focus.rawValue
     @AppStorage("activeTaskID") private var activeTaskID: String = ""
+    @AppStorage("momentumTier") private var momentumTier: Int = 0
+    @AppStorage("lastSessionTimestamp") private var lastSessionTimestamp: Double = 0
+    @AppStorage("sessionsToday") private var sessionsToday: Int = 0
+    @AppStorage("sessionsTodayDate") private var sessionsTodayDate: String = ""
+    @AppStorage("unlockedMilestones") private var unlockedMilestones: String = ""
+    @AppStorage("totalFocusMinutes") private var totalFocusMinutes: Int = 0
+    @AppStorage("totalFocusSessions") private var totalFocusSessions: Int = 0
 
     var selectedMode: TimerMode {
         get { TimerMode(rawValue: selectedModeRaw) ?? .focus }
@@ -72,9 +78,14 @@ struct FocusTimerView: View {
     @State private var completedTask: TaskItem? = nil
     @State private var completedDuration: Int = 0
     @State private var showStopConfirmation = false
+    @State private var nudgeTask: TaskItem? = nil
+    @State private var showRewardCard = false
+    @State private var rewardCardData: RewardCardData? = nil
+    @State private var showMiniRewardCard = false
+    @State private var miniRewardXP: Int = 0
+    @State private var miniRewardLevel: LevelInfo = RewardSystem.levelInfo(for: 0)
 
     let modes = TimerMode.allCases
-    private let focusSessionXP = 25
 
     var isPaused: Bool {
         return !timerManager.isRunning && timerManager.timeRemaining < timerManager.initialTime && timerManager.timeRemaining > 0
@@ -167,6 +178,12 @@ struct FocusTimerView: View {
                         onTap: handleTap
                     )
 
+                    if selectedMode == .focus, !isSessionActive, let task = nudgeTask {
+                        JustFiveMinutesCard(task: task, onLaunch: { launchNudge(task) }, onDismiss: { nudgeTask = nil })
+                            .padding(.horizontal, 40)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+
                     Spacer()
 
                     TimerControlsView(
@@ -182,21 +199,20 @@ struct FocusTimerView: View {
                         onTapRunning: handleTap,
                         onStop: { showStopConfirmation = true },
                         onStart: {
+                            nudgeTask = nil
                             // Show task picker first if in focus mode and no task selected
                             if selectedMode == .focus && activeTask == nil {
                                 showTaskPicker = true
                             } else {
                                 withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                                     timerManager.start()
-                                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                                    Haptics.impact(.heavy)
                                 }
                             }
                         }
                     )
                 }
             }
-            .toolbar(timerManager.isRunning ? .hidden : .visible, for: .tabBar)
-            .animation(.easeInOut, value: timerManager.isRunning)
             .preferredColorScheme(preferredScheme)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -215,7 +231,7 @@ struct FocusTimerView: View {
                     shouldStartAfterPicker = false
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                         timerManager.start()
-                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                        Haptics.impact(.heavy)
                     }
                 }
             }) {
@@ -230,6 +246,23 @@ struct FocusTimerView: View {
                     activeTask = nil
                     activeTaskID = ""
                 }
+            }
+            .sheet(isPresented: $showRewardCard, onDismiss: {
+                showMoodPrompt = true
+            }) {
+                if let data = rewardCardData {
+                    RewardCardView(data: data) { showRewardCard = false }
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                        .interactiveDismissDisabled()
+                }
+            }
+            .sheet(isPresented: $showMiniRewardCard) {
+                MiniRewardCardView(xp: miniRewardXP, levelInfo: miniRewardLevel) {
+                    showMiniRewardCard = false
+                }
+                .presentationDetents([.height(200)])
+                .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showMoodPrompt) {
                 SessionMoodPromptView(
@@ -247,10 +280,10 @@ struct FocusTimerView: View {
             }
             .onChange(of: timerManager.completionEvents) { _, _ in
                 completeSession()
+                findNudgeTask()
             }
-            .onChange(of: scenePhase) { _, newPhase in
-                if newPhase == .active { timerManager.appMovedToForeground() }
-                if newPhase == .background { timerManager.appMovedToBackground() }
+            .onChange(of: isSessionActive) { _, active in
+                if !active { findNudgeTask() }
             }
             .onChange(of: selectedMode) { _, newMode in
                  if !timerManager.isRunning { updateTimerForMode(newMode) }
@@ -258,6 +291,7 @@ struct FocusTimerView: View {
             .onAppear {
                 if !timerManager.isRunning { updateTimerForMode(selectedMode) }
                 loadActiveTaskFromStorage()
+                findNudgeTask()
             }
             .onChange(of: activeTaskID) { _, _ in
                 loadActiveTaskFromStorage()
@@ -271,12 +305,12 @@ struct FocusTimerView: View {
         if timerManager.isRunning {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                 timerManager.pause()
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Haptics.impact(.medium)
             }
         } else if isPaused {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                 timerManager.start()
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Haptics.impact(.medium)
             }
         }
     }
@@ -286,28 +320,38 @@ struct FocusTimerView: View {
             timerManager.pause()
             updateTimerForMode(selectedMode)
         }
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Haptics.impact(.medium)
+    }
+
+    private func incrementSessionsToday() -> Int {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        let today = fmt.string(from: Date())
+        if sessionsTodayDate != today {
+            sessionsToday = 1
+            sessionsTodayDate = today
+        } else {
+            sessionsToday += 1
+        }
+        return sessionsToday
     }
 
     private func completeSession() {
         timerManager.pause()
-        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        Haptics.impact(.heavy)
 
         withAnimation {
             if selectedMode == .focus {
-                totalXP += focusSessionXP
+                // 1. Capture context
                 sessionCount += 1
-
-                // Capture task info for post-session prompt
                 completedTask = activeTask
                 completedDuration = Int(timerManager.initialTime / 60)
 
-                // Update streak and cumulative focus time on the task
                 if let task = activeTask {
-                    updateTaskStreak(task, minutes: defaultWorkTime)
+                    updateTaskStreak(task, minutes: completedDuration)
                 }
 
-                // Cycle to next mode
+                // 2. Cycle Pomodoro mode
                 if sessionCount >= 2 {
                     selectedMode = .longBreak
                     sessionCount = 0
@@ -315,14 +359,82 @@ struct FocusTimerView: View {
                     selectedMode = .shortBreak
                 }
 
-                // Tier XP bonuses — check if completing this task cleared a full runway tier
-                awardRunwayBonuses()
+                // 3. Compute bonuses
+                let runwayBonuses = computeRunwayBonuses()
+                let todaySessions = incrementSessionsToday()
 
-                // Clear active task and show mood prompt
+                // 4. Calculate reward
+                var reward = RewardSystem.calculateReward(
+                    mode: .focus,
+                    didPause: timerManager.didPauseThisSession,
+                    momentumTier: momentumTier,
+                    sessionsToday: todaySessions,
+                    runwayBonuses: runwayBonuses
+                )
+
+                // 5. Check milestones (use OLD lastSessionTimestamp for comeback check)
+                let milestoneCtx = MilestoneContext(
+                    totalMinutes: totalFocusMinutes + completedDuration,
+                    totalSessions: totalFocusSessions + 1,
+                    sessionsToday: todaySessions,
+                    sessionDurationMinutes: completedDuration,
+                    completedFullRunway: runwayBonuses.contains { $0.label == "Full Runway Clear" },
+                    currentHour: Calendar.current.component(.hour, from: Date()),
+                    daysSinceLastSession: RewardSystem.daysSince(lastSessionTimestamp)
+                )
+                let unlockedSet = RewardSystem.parseUnlocked(unlockedMilestones)
+                let newMilestones = RewardSystem.checkNewMilestones(context: milestoneCtx, unlocked: unlockedSet)
+
+                // 6. Merge milestone XP into reward lines
+                var combinedLines = reward.lines
+                for m in newMilestones {
+                    combinedLines.append(RewardLine(label: m.name, xp: m.xpReward, isBonus: true))
+                }
+                let combinedReward = RewardResult(lines: combinedLines)
+
+                // 7. Apply XP (single write)
+                let xpBefore = totalXP
+                totalXP += combinedReward.totalXP
+                let levelUp = RewardSystem.checkLevelUp(xpBefore: xpBefore, xpAfter: totalXP)
+
+                // 8. Update persistence (AFTER reward calc uses old values)
+                momentumTier = RewardSystem.updatedMomentumTier(current: momentumTier, lastSessionTimestamp: lastSessionTimestamp)
+                lastSessionTimestamp = Date().timeIntervalSinceReferenceDate
+                totalFocusMinutes += completedDuration
+                totalFocusSessions += 1
+                if !newMilestones.isEmpty {
+                    var updated = unlockedSet
+                    for m in newMilestones { updated.insert(m.id) }
+                    unlockedMilestones = RewardSystem.serializeUnlocked(updated)
+                }
+
+                // 9. Clear active task
                 activeTask = nil
                 activeTaskID = ""
-                showMoodPrompt = true
+
+                // 10. Build RewardCardData and show
+                let levelBefore = RewardSystem.levelInfo(for: xpBefore)
+                let levelAfter = RewardSystem.levelInfo(for: totalXP)
+                rewardCardData = RewardCardData(
+                    taskName: completedTask?.title,
+                    durationMinutes: completedDuration,
+                    reward: combinedReward,
+                    milestones: newMilestones,
+                    levelBefore: levelBefore,
+                    levelAfter: levelAfter,
+                    didLevelUp: levelUp != nil
+                )
+                showRewardCard = true
+            } else if selectedMode == .longBreak {
+                // Long break: mini reward
+                totalXP += 10
+                miniRewardXP = 10
+                miniRewardLevel = RewardSystem.levelInfo(for: totalXP)
+                showMiniRewardCard = true
+                selectedMode = .focus
             } else {
+                // Short break: silent XP
+                totalXP += 5
                 selectedMode = .focus
             }
             updateTimerForMode(selectedMode)
@@ -373,14 +485,14 @@ struct FocusTimerView: View {
         }
     }
 
-    private func awardRunwayBonuses() {
-        guard let task = completedTask, task.runwayTier != .none else { return }
+    private func computeRunwayBonuses() -> [(label: String, xp: Int)] {
+        guard let task = completedTask, task.runwayTier != .none else { return [] }
 
+        var bonuses: [(label: String, xp: Int)] = []
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: Date())
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
 
-        // Fetch today's runway tasks to check tier completion
         let tier = task.runwayTier
         let tierRaw = tier.rawValue
         let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate {
@@ -388,15 +500,19 @@ struct FocusTimerView: View {
             && $0.runwayTierRaw == tierRaw
         })
 
-        guard let tierTasks = try? modelContext.fetch(descriptor) else { return }
+        guard let tierTasks = try? modelContext.fetch(descriptor) else { return [] }
         let allDone = tierTasks.allSatisfy { $0.isCompleted }
 
         if allDone {
+            let tierXP: Int
             switch tier {
-            case .small: totalXP += 10
-            case .medium: totalXP += 25
-            case .big: totalXP += 50
-            case .none: break
+            case .small: tierXP = 10
+            case .medium: tierXP = 25
+            case .big: tierXP = 50
+            case .none: tierXP = 0
+            }
+            if tierXP > 0 {
+                bonuses.append((label: "\(tier.rawValue.capitalized) Tier Clear", xp: tierXP))
             }
 
             // Check if entire runway is complete
@@ -408,9 +524,44 @@ struct FocusTimerView: View {
             if let allRunway = try? modelContext.fetch(allRunwayDescriptor),
                !allRunway.isEmpty,
                allRunway.allSatisfy({ $0.isCompleted }) {
-                totalXP += 100
+                bonuses.append((label: "Full Runway Clear", xp: 100))
             }
         }
+
+        return bonuses
+    }
+
+    // MARK: - Just 5 Minutes Nudge
+
+    private func findNudgeTask() {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        let twoDaysAgo = calendar.date(byAdding: .day, value: -2, to: startOfDay)!
+
+        let descriptor = FetchDescriptor<TaskItem>(predicate: #Predicate {
+            $0.scheduledDate >= startOfDay && $0.scheduledDate < endOfDay && !$0.isCompleted
+        })
+        guard let tasks = try? modelContext.fetch(descriptor) else { return }
+
+        nudgeTask = tasks.first { task in
+            if let lastFocused = task.lastFocusedDate {
+                return lastFocused < twoDaysAgo
+            } else {
+                return task.createdAt < twoDaysAgo
+            }
+        }
+    }
+
+    private func launchNudge(_ task: TaskItem) {
+        activeTask = task
+        activeTaskID = String(task.createdAt.timeIntervalSinceReferenceDate)
+        timerManager.setDuration(minutes: 5)
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            timerManager.start()
+            Haptics.impact(.heavy)
+        }
+        nudgeTask = nil
     }
 
     /// Load active task from persisted createdAt timestamp
@@ -447,7 +598,7 @@ struct TimerDisplayView: View {
             // Active task label above timer
             if let title = activeTaskTitle {
                 Text(title)
-                    .font(.subheadline)
+                    .font(.appSubhead)
                     .fontWeight(.medium)
                     .foregroundStyle(contentColor.opacity(0.75))
                     .lineLimit(1)
@@ -466,7 +617,7 @@ struct TimerDisplayView: View {
 
             if isPaused {
                 Text("Tap to Resume")
-                    .font(.headline)
+                    .font(.appHeadline)
                     .foregroundStyle(contentColor.opacity(0.8))
                     .padding(.top, 5)
                     .transition(.opacity)
@@ -508,7 +659,7 @@ struct TimerControlsView: View {
                     if isPaused {
                         Button(action: onStop) {
                             Text("Stop Session")
-                                .font(.title3).fontWeight(.semibold)
+                                .font(.appTitle3).fontWeight(.semibold)
                                 .frame(maxWidth: .infinity).frame(height: 60)
                                 .background(Color.white.opacity(0.15))
                                 .foregroundColor(.white)
@@ -519,7 +670,7 @@ struct TimerControlsView: View {
                     } else {
                         Button(action: onStart) {
                             Text("Start \(selectedMode.displayTitle)")
-                                .font(.title3).fontWeight(.semibold)
+                                .font(.appTitle3).fontWeight(.semibold)
                                 .frame(maxWidth: .infinity).frame(height: 60)
                                 .background(themeColor)
                                 .foregroundColor(.white)
@@ -529,13 +680,13 @@ struct TimerControlsView: View {
                         .padding(.horizontal, 40)
                     }
                 }
-                .padding(.bottom, 50)
+                .padding(.bottom, 100)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 Color.clear.contentShape(Rectangle()).frame(height: 150)
                     .onTapGesture { onTapRunning() }
                 Text("Tap screen to pause")
-                    .font(.caption).foregroundStyle(contentColor.opacity(0.6)).padding(.bottom, 50)
+                    .font(.appCaption).foregroundStyle(contentColor.opacity(0.6)).padding(.bottom, 100)
             }
         }
     }
@@ -567,7 +718,7 @@ struct TaskPickerSheetView: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
                 Text("What are you focusing on?")
-                    .font(.title2).fontWeight(.bold)
+                    .font(.appTitle2).fontWeight(.bold)
                     .padding(.horizontal, 20)
                     .padding(.top, 24)
                     .padding(.bottom, 16)
@@ -595,7 +746,7 @@ struct TaskPickerSheetView: View {
                                 // Show streak flame if applicable
                                 if task.focusStreak >= 2 {
                                     Label("\(task.focusStreak)", systemImage: "flame.fill")
-                                        .font(.caption)
+                                        .font(.appCaption)
                                         .foregroundStyle(.orange)
                                 }
                             }
@@ -611,7 +762,7 @@ struct TaskPickerSheetView: View {
                     dismiss()
                 } label: {
                     Text("Start without a task")
-                        .font(.subheadline)
+                        .font(.appSubhead)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -639,16 +790,16 @@ struct SessionMoodPromptView: View {
         VStack(spacing: 24) {
             VStack(spacing: 6) {
                 Text("Session complete! 🎉")
-                    .font(.title3).fontWeight(.bold)
+                    .font(.appTitle3).fontWeight(.bold)
                 if let title = task?.title {
                     Text("You focused on \"\(title)\" for \(durationMinutes) min")
-                        .font(.subheadline)
+                        .font(.appSubhead)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
                 } else {
                     Text("\(durationMinutes) minutes of focused work")
-                        .font(.subheadline)
+                        .font(.appSubhead)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -656,12 +807,12 @@ struct SessionMoodPromptView: View {
 
             VStack(spacing: 12) {
                 Text("How did that feel?")
-                    .font(.headline)
+                    .font(.appHeadline)
 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 12) {
                     ForEach(moodEmojis, id: \.self) { emoji in
                         Button {
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            Haptics.impact(.light)
                             onSelect(emoji)
                         } label: {
                             Text(emoji)
@@ -674,11 +825,65 @@ struct SessionMoodPromptView: View {
 
             Button(action: onSkip) {
                 Text("Skip")
-                    .font(.subheadline)
+                    .font(.appSubhead)
                     .foregroundStyle(.secondary)
             }
             .padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Just 5 Minutes Nudge Card
+struct JustFiveMinutesCard: View {
+    let task: TaskItem
+    let onLaunch: () -> Void
+    let onDismiss: () -> Void
+
+    private var daysSinceActivity: Int {
+        let calendar = Calendar.current
+        let referenceDate = task.lastFocusedDate ?? task.createdAt
+        return max(calendar.dateComponents([.day], from: referenceDate, to: Date()).day ?? 0, 0)
+    }
+
+    private var overdueLabel: String {
+        let days = daysSinceActivity
+        if days == 1 { return "Untouched for 1 day" }
+        return "Untouched for \(days) days"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(overdueLabel)
+                    .font(.appCaption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text(task.title)
+                .font(.appHeadline)
+                .fontWeight(.semibold)
+                .lineLimit(2)
+
+            Button(action: onLaunch) {
+                Text("Just 5 min →")
+                    .font(.appSubhead)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(Color.cardinalRed)
+                    .cornerRadius(12)
+            }
+        }
+        .padding(16)
+        .background(Color(.systemGray6))
+        .cornerRadius(16)
     }
 }

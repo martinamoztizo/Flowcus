@@ -53,7 +53,7 @@ struct EisenhowerMatrixView: View {
 
     private func launchIntoFocus(_ task: TaskItem) {
         activeTaskID = String(task.createdAt.timeIntervalSinceReferenceDate)
-        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        Haptics.impact(.heavy)
         switchToFocusTab()
     }
 
@@ -118,13 +118,13 @@ struct QuadrantCellView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     // Main label (e.g. "Do First")
                     Text(quadrant.displayTitle)
-                        .font(.caption)
+                        .font(.appCaption)
                         .fontWeight(.bold)
                         .foregroundStyle(quadrant.color)
 
                     // Subtitle describing the axes (e.g. "Urgent & Important")
                     Text(quadrant.subtitle)
-                        .font(.system(size: 8))
+                        .font(.appCaption2)
                         .foregroundStyle(quadrant.color.opacity(0.7))
                 }
 
@@ -132,7 +132,7 @@ struct QuadrantCellView: View {
 
                 // Task count badge
                 Text("\(tasks.count)")
-                    .font(.caption2)
+                    .font(.appCaption2)
                     .fontWeight(.semibold)
                     .foregroundStyle(quadrant.color.opacity(0.6))
 
@@ -141,7 +141,7 @@ struct QuadrantCellView: View {
                     withAnimation(.easeOut(duration: 0.2)) {
                         isAddingTask = true
                     }
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    Haptics.impact(.light)
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .foregroundStyle(quadrant.color)
@@ -154,7 +154,7 @@ struct QuadrantCellView: View {
             if isAddingTask {
                 HStack(spacing: 6) {
                     TextField("New task...", text: $newTaskTitle)
-                        .font(.caption)
+                        .font(.appCaption)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
                         .background(Color(.systemGray5))
@@ -212,7 +212,7 @@ struct QuadrantCellView: View {
         // Reset input state
         newTaskTitle = ""
         isAddingTask = false
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptics.impact(.light)
     }
 }
 
@@ -226,44 +226,30 @@ struct MatrixTaskCard: View {
     var onFocus: (() -> Void)? = nil
     @Environment(\.modelContext) private var modelContext
 
-    /// Tracks checkbox scale for the spring bounce animation (same pattern as TaskCardView)
-    @State private var checkScale: CGFloat = 1.0
-
     var body: some View {
         HStack(spacing: 8) {
-            // MARK: Compact Checkbox
-            Button {
-                // Spring bounce animation on toggle
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
-                    checkScale = 1.3
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
-                        checkScale = 1.0
+            AnimatedCheckbox(
+                isCompleted: task.isCompleted,
+                font: .caption,
+                checkedColor: task.quadrant.color,
+                onToggle: {
+                    task.isCompleted.toggle()
+                    if task.isCompleted {
+                        Haptics.impact(.heavy)
                     }
                 }
-                task.isCompleted.toggle()
-                if task.isCompleted {
-                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                }
-            } label: {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.caption)
-                    .foregroundStyle(task.isCompleted ? task.quadrant.color : .gray)
-                    .scaleEffect(checkScale)
-            }
-            .buttonStyle(.plain)
+            )
 
-            // Task title — strikethrough when completed
-            Text(task.title)
-                .font(.caption2)
-                .strikethrough(task.isCompleted)
-                .foregroundStyle(task.isCompleted ? .gray : .primary)
-                .lineLimit(2)
+            InlineEditableText(
+                text: task.title,
+                font: .appCaption2,
+                isCompleted: task.isCompleted,
+                lineLimit: 2,
+                onCommit: { task.title = $0 }
+            )
 
             Spacer()
 
-            // Visible play button — Q1 only (one-tap focus for highest priority)
             if task.quadrant == .q1, let focus = onFocus {
                 Button(action: focus) {
                     Image(systemName: "play.circle.fill")
@@ -279,11 +265,8 @@ struct MatrixTaskCard: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(Color(.systemGray6))
         )
-        // Dim completed tasks
         .opacity(task.isCompleted ? 0.5 : 1.0)
-        // MARK: Context Menu — focus, reassign quadrant, or delete
         .contextMenu {
-            // Send to Focus — available on all quadrants
             if let focus = onFocus {
                 Button(action: focus) {
                     Label("Send to Focus", systemImage: "play.fill")
@@ -292,12 +275,11 @@ struct MatrixTaskCard: View {
 
             Divider()
 
-            // Show "Move to..." options for all quadrants except the current one
             ForEach(EisenhowerQuadrant.quadrants, id: \.self) { q in
                 if q != task.quadrant {
                     Button {
                         withAnimation { task.quadrant = q }
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        Haptics.impact(.medium)
                     } label: {
                         Label(q.displayTitle, systemImage: "arrow.right.circle")
                     }
@@ -306,7 +288,6 @@ struct MatrixTaskCard: View {
 
             Divider()
 
-            // Delete option
             Button(role: .destructive) {
                 withAnimation { modelContext.delete(task) }
             } label: {
@@ -334,12 +315,12 @@ struct UnsortedTrayView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text("Unsorted — hold to assign")
-                    .font(.caption)
+                    .font(.appCaption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 // Count indicator
                 Text("\(tasks.count)")
-                    .font(.caption2)
+                    .font(.appCaption2)
                     .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
             }
@@ -373,25 +354,27 @@ struct UnsortedTaskChip: View {
     let task: TaskItem
 
     var body: some View {
-        Text(task.title)
-            .font(.caption2)
-            .lineLimit(1)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(Color(.systemGray5))
-            )
-            // Long-press to assign to a quadrant
-            .contextMenu {
-                ForEach(EisenhowerQuadrant.quadrants, id: \.self) { q in
-                    Button {
-                        withAnimation { task.quadrant = q }
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    } label: {
-                        Label(q.displayTitle, systemImage: "arrow.right.circle")
-                    }
+        InlineEditableText(
+            text: task.title,
+            font: .appCaption2,
+            lineLimit: 1,
+            onCommit: { task.title = $0 }
+        )
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(Color(.systemGray5))
+        )
+        .contextMenu {
+            ForEach(EisenhowerQuadrant.quadrants, id: \.self) { q in
+                Button {
+                    withAnimation { task.quadrant = q }
+                    Haptics.impact(.medium)
+                } label: {
+                    Label(q.displayTitle, systemImage: "arrow.right.circle")
                 }
             }
+        }
     }
 }

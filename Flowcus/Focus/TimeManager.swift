@@ -24,6 +24,7 @@ enum TimerState: Codable {
     case paused(timeRemaining: TimeInterval, duration: TimeInterval)
 }
 
+@MainActor
 class TimeManager: ObservableObject {
     static let minDurationMinutes = 1
     static let maxDurationMinutes = 1440
@@ -33,7 +34,8 @@ class TimeManager: ObservableObject {
     @Published var initialTime: TimeInterval = 25 * 60
     @Published var isRunning: Bool = false
     @Published private(set) var completionEvents: Int = 0
-    
+    @Published private(set) var didPauseThisSession: Bool = false
+
     private var timer: Timer?
     
     // The Single Source of Truth
@@ -62,19 +64,29 @@ class TimeManager: ObservableObject {
     }
     
     func start() {
+        let remaining: TimeInterval
+        let duration: TimeInterval
+
         switch state {
-        case .idle(let duration), .paused(_, let duration):
-            let target = Date().addingTimeInterval(timeRemaining)
-            state = .running(targetEndTime: target, duration: duration)
-            scheduleTimer()
+        case .idle(let d):
+            remaining = d
+            duration = d
+            didPauseThisSession = false
+        case .paused(let r, let d):
+            remaining = r
+            duration = d
         case .running:
-            break
+            return
         }
+
+        state = .running(targetEndTime: Date().addingTimeInterval(remaining), duration: duration)
+        scheduleTimer()
     }
     
     func pause() {
         switch state {
         case .running(_, let duration):
+            didPauseThisSession = true
             state = .paused(timeRemaining: timeRemaining, duration: duration)
             timer?.invalidate()
             timer = nil
@@ -84,20 +96,19 @@ class TimeManager: ObservableObject {
     }
     
     private func completeTimer() {
-        let currentDuration = initialTime
-        state = .paused(timeRemaining: 0, duration: currentDuration)
+        guard case .running(_, let duration) = state else { return }
+        state = .paused(timeRemaining: 0, duration: duration)
         timer?.invalidate()
         timer = nil
-        
+
         completionEvents += 1
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+        Haptics.success()
     }
     
     private func scheduleTimer() {
         timer?.invalidate()
         let newTimer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-                self?.tick()
+            MainActor.assumeIsolated { self?.tick() }
         }
         RunLoop.main.add(newTimer, forMode: .common)
         timer = newTimer

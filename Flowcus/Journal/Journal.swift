@@ -57,28 +57,28 @@ struct JournalView: View {
                                 // Title is now prominent
                                 if !entry.title.isEmpty {
                                     Text(entry.title)
-                                        .font(.headline)
+                                        .font(.appHeadline)
                                         .lineLimit(1)
                                 } else {
                                     Text("Untitled Entry")
-                                        .font(.headline)
+                                        .font(.appHeadline)
                                         .foregroundStyle(.secondary)
                                 }
                                 
                                 Spacer()
                                 
                                 Text(entry.mood) // Directly uses the saved emoji
-                                    .font(.caption).padding(4)
+                                    .font(.appCaption).padding(4)
                                     .background(Color(.systemGray6)).cornerRadius(5)
                             }
                             
                             HStack {
                                 Text(entry.timestamp.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.appCaption).foregroundStyle(.secondary)
                             }
                             
                             Text(entry.content)
-                                .font(.body)
+                                .font(.appBody)
                                 .multilineTextAlignment(.leading)
                                 .lineLimit(3)
                                 .foregroundStyle(.secondary)
@@ -88,6 +88,7 @@ struct JournalView: View {
                 }
                 .onDelete(perform: deleteEntries)
             }
+            .contentMargins(.bottom, 80)
             .navigationTitle("Brain Dump")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -159,12 +160,12 @@ struct JournalEditorView: View {
                 ZStack(alignment: .leading) {
                     if title.isEmpty && !isTitleFocused {
                         Text("New Entry")
-                            .font(.title.bold())
+                            .font(.appTitle)
                             .foregroundStyle(.primary)
                     }
 
                     TextField("", text: $title)
-                        .font(.title.bold())
+                        .font(.appTitle)
                         .focused($isTitleFocused)
                         .foregroundStyle(.primary)
                 }
@@ -178,10 +179,10 @@ struct JournalEditorView: View {
                         ForEach(displayEmojis, id: \.self) { mood in
                             Button(action: {
                                 withAnimation(.snappy) { selectedMood = mood }
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                Haptics.impact(.light)
                             }) {
                                 Text(mood)
-                                    .font(.title3)
+                                    .font(.appTitle3)
                                     .frame(width: 36, height: 36)
                                     .background(selectedMood == mood ? Color.cardinalRed.opacity(0.15) : Color.clear)
                                     .clipShape(Circle())
@@ -204,7 +205,7 @@ struct JournalEditorView: View {
                         .popover(isPresented: $showEmojiPicker, arrowEdge: .top) {
                             EmojiPickerView { emoji in
                                 withAnimation(.snappy) { selectedMood = emoji }
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                Haptics.impact(.light)
                                 showEmojiPicker = false
                             }
                             .presentationCompactAdaptation(.popover)
@@ -302,7 +303,7 @@ struct EmojiPickerView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 44))], spacing: 4) {
                     ForEach(emojiCategories[selectedCategory].emojis, id: \.self) { emoji in
                         Text(emoji)
-                            .font(.title2)
+                            .font(.appTitle2)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                             .onTapGesture { onSelect(emoji) }

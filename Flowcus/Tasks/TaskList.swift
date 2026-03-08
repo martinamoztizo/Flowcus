@@ -49,6 +49,7 @@ enum TaskViewMode: String, CaseIterable, Hashable {
 // MARK: - Task List View
 struct TaskListView: View {
     var switchToFocusTab: () -> Void = {}
+    @Binding var calendarRevealProgress: Double
     @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var navigationPath: [TaskViewMode] = []
 
@@ -98,7 +99,7 @@ struct TaskListView: View {
                 VStack(spacing: -10) {
                     ZStack {
                         Text(bottomDateString)
-                            .font(.headline)
+                            .font(.appHeadline)
                             .foregroundStyle(.primary)
                             .padding(.top, 20)
                             .padding(.bottom, 30)
@@ -119,6 +120,7 @@ struct TaskListView: View {
                             set: { selectedDate = Calendar.current.startOfDay(for: $0) }
                         ), displayedComponents: .date)
                             .datePickerStyle(.graphical)
+                            .tint(.cardinalRed)
                             .padding(.horizontal)
                             .padding(.bottom, 20)
                     }
@@ -133,7 +135,7 @@ struct TaskListView: View {
                     .shadow(radius: 20)
                     .opacity(revealProgress)
                 }
-                .offset(y: max((isCalendarOpen ? 0 : closedOffset) + dragOffset, 0))
+                .offset(y: max((isCalendarOpen ? 0 : closedOffset) + dragOffset, 0) - 140 * (1.0 - revealProgress))
                 .gesture(
                     DragGesture()
                         .onChanged { value in
@@ -166,6 +168,9 @@ struct TaskListView: View {
                 )
             }
             .ignoresSafeArea(edges: .bottom)
+            .onAppear { calendarRevealProgress = revealProgress }
+            .onChange(of: dragOffset) { calendarRevealProgress = revealProgress }
+            .onChange(of: isCalendarOpen) { calendarRevealProgress = revealProgress }
             .navigationTitle(headerTitle)
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: TaskViewMode.self) { mode in
@@ -203,7 +208,7 @@ struct TaskViewPickerPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Pick your workflow")
-                    .font(.subheadline)
+                    .font(.appSubhead)
                     .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
@@ -241,11 +246,11 @@ struct TaskViewCard: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mode.title)
-                        .font(.body)
+                        .font(.appBody)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
                     Text(mode.description)
-                        .font(.caption)
+                        .font(.appCaption)
                         .foregroundStyle(.secondary)
                 }
 
@@ -325,10 +330,10 @@ struct DailyTaskList: View {
                         .font(.system(size: 48))
                         .foregroundStyle(Color.cardinalRed.opacity(0.5))
                     Text("Nothing planned yet")
-                        .font(.headline)
+                        .font(.appHeadline)
                         .foregroundStyle(.secondary)
                     Text("Tap + to get started")
-                        .font(.subheadline)
+                        .font(.appSubhead)
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
@@ -359,12 +364,12 @@ struct DailyTaskList: View {
         let newTask = TaskItem(title: trimmedTitle, scheduledDate: date)
         modelContext.insert(newTask)
         newTaskTitle = ""
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptics.impact(.light)
     }
     
     private func toggleTask(_ task: TaskItem) {
         task.isCompleted.toggle()
-        if task.isCompleted { UIImpactFeedbackGenerator(style: .heavy).impactOccurred() }
+        if task.isCompleted { Haptics.impact(.heavy) }
     }
     
     /// Delete a single task (used by card swipe-to-delete)
@@ -384,94 +389,68 @@ struct TaskCardView: View {
     let onToggle: () -> Void
     let onDelete: () -> Void
 
-    // Tracks checkbox scale for spring bounce animation
-    @State private var checkScale: CGFloat = 1.0
-    // Tracks horizontal drag offset for swipe-to-delete
     @State private var swipeOffset: CGFloat = 0
 
     var body: some View {
         HStack(spacing: 12) {
+            AnimatedCheckbox(
+                isCompleted: task.isCompleted,
+                checkedIcon: "checkmark.square.fill",
+                uncheckedIcon: "square",
+                font: .title2,
+                checkedColor: .cardinalRed,
+                onToggle: onToggle
+            )
 
-            // MARK: Animated Checkbox
-            // Rounded square style — fills with cardinalRed on completion
-            Button(action: {
-                // Spring bounce: scale up briefly, then settle back
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.5)) {
-                    checkScale = 1.3
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
-                        checkScale = 1.0
-                    }
-                }
-                onToggle()
-            }) {
-                Image(systemName: task.isCompleted ? "checkmark.square.fill" : "square")
-                    .font(.title2)
-                    .foregroundStyle(task.isCompleted ? Color.cardinalRed : .gray)
-                    .scaleEffect(checkScale)
-            }
-            .buttonStyle(.plain)
-
-            // MARK: Title + Focus Minutes
             VStack(alignment: .leading, spacing: 3) {
-                // Task title — strikethrough when done
-                Text(task.title)
-                    .font(.body)
-                    .strikethrough(task.isCompleted)
-                    .foregroundStyle(task.isCompleted ? .gray : .primary)
+                InlineEditableText(
+                    text: task.title,
+                    font: .appBody,
+                    isCompleted: task.isCompleted,
+                    onCommit: { task.title = $0 }
+                )
 
-                // Focus time pill — only shown if task has logged focus time
                 if task.totalFocusMinutes > 0 {
                     Label("\(task.totalFocusMinutes) min focused", systemImage: "clock")
-                        .font(.caption2)
+                        .font(.appCaption2)
                         .foregroundStyle(.secondary)
                 }
             }
 
             Spacer()
 
-            // MARK: Streak Badge
-            // Flame icon for consecutive-day focus streaks (unchanged from before)
             if task.focusStreak >= 2 {
                 Label("\(task.focusStreak)", systemImage: "flame.fill")
-                    .font(.caption)
+                    .font(.appCaption)
                     .fontWeight(.semibold)
                     .foregroundStyle(.orange)
                     .transition(.scale.combined(with: .opacity))
             }
         }
-        // MARK: Card Styling
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(Color(.systemGray6))
         )
-        // Dim the entire card when completed (instead of just graying the text)
         .opacity(task.isCompleted ? 0.6 : 1.0)
-        // MARK: Swipe-to-Delete Gesture
         .offset(x: swipeOffset)
         .gesture(
             DragGesture()
                 .onChanged { value in
-                    // Only allow left swipe (negative direction)
                     if value.translation.width < 0 {
                         swipeOffset = value.translation.width
                     }
                 }
                 .onEnded { value in
-                    // Delete if swiped past threshold, otherwise snap back
                     if value.translation.width < -120 {
                         withAnimation(.easeOut(duration: 0.2)) {
-                            swipeOffset = -500 // Slide off screen
+                            swipeOffset = -500
                         }
-                        // Remove after animation completes
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                             onDelete()
                         }
                     } else {
-                        // Snap back to original position
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                             swipeOffset = 0
                         }

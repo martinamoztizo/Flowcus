@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#111111"/>
+
+  <!-- Cardinal red fill below the wave -->
+  <path
+    d="M 0,560
+       C 141,560 115,485 256,485
+       C 397,485 371,560 512,560
+       C 653,560 627,635 768,635
+       C 909,635 883,560 1024,560
+       L 1024,1024 L 0,1024 Z"
+    fill="#C41E3A"/>
+
+  <!-- White sine wave -->
+  <path
+    d="M 0,560
+       C 141,560 115,485 256,485
+       C 397,485 371,560 512,560
+       C 653,560 627,635 768,635
+       C 909,635 883,560 1024,560"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+</svg>
