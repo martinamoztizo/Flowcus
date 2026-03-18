@@ -30,6 +30,7 @@ struct SettingsView: View {
     @AppStorage("workMinutes") private var defaultWorkTime = 25
     @AppStorage("shortBreakMinutes") private var shortBreakTime = 5
     @AppStorage("longBreakMinutes") private var longBreakTime = 15
+    @AppStorage("debugEnabled") private var debugEnabled = false
 
     @State private var activeSetting: SettingType?
 
@@ -76,6 +77,12 @@ struct SettingsView: View {
                     Text("Selecting a standard duration will automatically update your setup.")
                         .font(.appCaption).foregroundStyle(.secondary)
                 }
+
+                #if DEBUG
+                Section("Developer") {
+                    Toggle("Debug Tools", isOn: $debugEnabled)
+                }
+                #endif
             }
             .navigationTitle("Timer Settings")
             .toolbar {
@@ -170,7 +177,8 @@ struct TimePickerSheet: View {
                 Text(title).font(.appHeadline)
                 Spacer()
                 Button("Done") {
-                    if isCustomMode, let newValue = Int(customInputText) {
+                    let digits = customInputText.filter { $0.isNumber }
+                    if isCustomMode, !digits.isEmpty, let newValue = Int(digits) {
                         value = min(max(newValue, TimeManager.minDurationMinutes), TimeManager.maxDurationMinutes)
                     }
                     dismiss()

@@ -261,8 +261,7 @@ struct RunwayView: View {
             // Completed tasks list
             ForEach(allRunwayTasks) { task in
                 HStack(spacing: 10) {
-                    Image(systemName: task.runwayTier.icon)
-                        .font(.caption)
+                    task.runwayTier.icon.sized(FlowcusIcon.captionSize)
                         .foregroundStyle(task.runwayTier.color)
                     Text(task.title)
                         .font(.appSubhead)
@@ -356,8 +355,7 @@ struct RunwayTierSection: View {
         VStack(alignment: .leading, spacing: 8) {
             // Header
             HStack {
-                Image(systemName: tier.icon)
-                    .font(.caption)
+                tier.icon.sized(FlowcusIcon.captionSize)
                     .foregroundStyle(tier.color)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tier.displayTitle)
@@ -539,7 +537,7 @@ struct RunwayTaskCard: View {
                         withAnimation { task.runwayTier = t }
                         Haptics.impact(.medium)
                     } label: {
-                        Label("Move to \(t.displayTitle)", systemImage: t.icon)
+                        Label { Text("Move to \(t.displayTitle)") } icon: { t.icon.sized(17) }
                     }
                 }
             }
@@ -573,8 +571,7 @@ struct RunwayHeroCard: View {
         VStack(spacing: 16) {
             // Tier badge
             HStack(spacing: 6) {
-                Image(systemName: task.runwayTier.icon)
-                    .font(.caption)
+                task.runwayTier.icon.sized(FlowcusIcon.captionSize)
                 Text(task.runwayTier.displayTitle)
                     .font(.appCaption)
                     .fontWeight(.semibold)
@@ -630,8 +627,7 @@ struct RunwayUpNextCard: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: task.runwayTier.icon)
-                .font(.caption2)
+            task.runwayTier.icon.sized(FlowcusIcon.captionSize)
                 .foregroundStyle(task.runwayTier.color)
 
             Text(task.title)
@@ -679,8 +675,7 @@ struct GhostCarryoverSection: View {
 
             ForEach(ghosts) { ghost in
                 HStack(spacing: 10) {
-                    Image(systemName: ghost.runwayTier.icon)
-                        .font(.caption2)
+                    ghost.runwayTier.icon.sized(FlowcusIcon.captionSize)
                         .foregroundStyle(ghost.runwayTier.color.opacity(0.5))
 
                     Text(ghost.title)
@@ -776,9 +771,8 @@ struct BacklogPickerSheet: View {
                             dismiss()
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: tier.icon)
+                                tier.icon.sized(FlowcusIcon.captionSize)
                                     .foregroundStyle(tier.color)
-                                    .font(.caption)
                                 Text(task.title)
                                     .foregroundStyle(.primary)
                                 Spacer()

@@ -9,7 +9,7 @@ import SwiftUI
 
 struct XPView: View {
     @AppStorage("totalXP") private var totalXP = 0
-    @AppStorage("momentumTier") private var momentumTier: Int = 0
+    @AppStorage("momentumTier") private var momentumTier: Int = 1
     @AppStorage("lastSessionTimestamp") private var lastSessionTimestamp: Double = 0
     @AppStorage("sessionsToday") private var sessionsToday: Int = 0
     @AppStorage("sessionsTodayDate") private var sessionsTodayDate: String = ""
@@ -132,11 +132,11 @@ struct XPView: View {
 
     private var statsSection: some View {
         HStack {
-            StatItem(value: "\(totalFocusMinutes)", label: "Minutes", icon: "clock.fill")
+            StatItem(value: "\(totalFocusMinutes)", label: "Minutes", icon: .statClock)
             Divider().frame(height: 40)
-            StatItem(value: "\(totalFocusSessions)", label: "Sessions", icon: "flame.fill")
+            StatItem(value: "\(totalFocusSessions)", label: "Sessions", icon: .statSessions)
             Divider().frame(height: 40)
-            StatItem(value: "\(todaySessions)", label: "Today", icon: "sun.max.fill")
+            StatItem(value: "\(todaySessions)", label: "Today", icon: .statToday)
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.ultraThinMaterial))
@@ -172,12 +172,11 @@ struct XPView: View {
 private struct StatItem: View {
     let value: String
     let label: String
-    let icon: String
+    let icon: FlowcusIcon
 
     var body: some View {
         VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
+            icon.sized(16)
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.appTitle3)
@@ -201,11 +200,16 @@ private struct MilestoneCardView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: isRevealed ? milestone.sfSymbol : "lock.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(
-                    isUnlocked ? Color.cardinalRed : .gray.opacity(isRevealed ? 0.3 : 0.2)
-                )
+            Group {
+                if isRevealed {
+                    milestone.icon.sized(28)
+                } else {
+                    FlowcusIcon.lock.sized(28)
+                }
+            }
+            .foregroundStyle(
+                isUnlocked ? Color.cardinalRed : .gray.opacity(isRevealed ? 0.3 : 0.2)
+            )
 
             Text(isRevealed ? milestone.name : "???")
                 .font(.appSubhead)

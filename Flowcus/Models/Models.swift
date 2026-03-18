@@ -95,12 +95,12 @@ enum RunwayTier: String, Codable, CaseIterable {
         }
     }
 
-    var icon: String {
+    var icon: FlowcusIcon {
         switch self {
-        case .big: return "star.fill"
-        case .medium: return "circle.fill"
-        case .small: return "bolt.fill"
-        case .none: return "minus"
+        case .big: return .tierBig
+        case .medium: return .tierMedium
+        case .small: return .tierSmall
+        case .none: return .tierNone
         }
     }
 
@@ -146,11 +146,16 @@ class TaskItem {
         set { runwayTierRaw = newValue.rawValue }
     }
 
-    init(title: String, isCompleted: Bool = false, scheduledDate: Date = Date()) {
+    init(title: String, isCompleted: Bool = false, scheduledDate: Date? = nil) {
         self.title = title
         self.isCompleted = isCompleted
+        #if DEBUG
+        self.createdAt = DebugTime.now
+        self.scheduledDate = scheduledDate ?? DebugTime.now
+        #else
         self.createdAt = Date()
-        self.scheduledDate = scheduledDate
+        self.scheduledDate = scheduledDate ?? Date()
+        #endif
     }
 }
 
@@ -168,7 +173,11 @@ class JournalEntry {
     init(title: String = "", content: String, mood: String = JournalEntry.defaultMood) {
         self.title = title
         self.content = content
+        #if DEBUG
+        self.timestamp = DebugTime.now
+        #else
         self.timestamp = Date()
+        #endif
         // We trust the UI (Emoji Keyboard) to provide a valid emoji string here.
         self.mood = mood
     }

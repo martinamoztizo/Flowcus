@@ -88,8 +88,7 @@ struct RewardCardView: View {
                 HStack(spacing: 12) {
                     ForEach(data.milestones) { milestone in
                         VStack(spacing: 4) {
-                            Image(systemName: milestone.sfSymbol)
-                                .font(.title2)
+                            milestone.icon.sized(28)
                                 .foregroundStyle(Color.cardinalRed)
                             Text(milestone.name)
                                 .font(.appCaption)

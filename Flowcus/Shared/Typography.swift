@@ -31,4 +31,16 @@ extension Font {
     static func appDisplay(size: CGFloat) -> Font {
         Font.custom(medium, size: size)
     }
+
+    // WEIGHT RULES — use these consistently across the app:
+    //
+    // .bold      → primary titles, hero text        (appTitle, appTitle2)
+    // .semibold  → section headers, button labels   (appTitle3, appHeadline)
+    // .medium    → secondary labels, metadata        (appSubhead, appBody)
+    // (none)     → reading text, captions            (appBody, appCaption, appCaption2)
+    //
+    // Exceptions:
+    //   Timer countdown — SF Pro Rounded (FocusTimer.swift)
+    //   Emojis — system font at explicit size
+    //   Heat map labels — system font at 8pt
 }

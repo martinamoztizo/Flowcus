@@ -95,6 +95,13 @@ class TimeManager: ObservableObject {
         }
     }
     
+    #if DEBUG
+    func debugComplete() {
+        guard case .running = state else { return }
+        completeTimer()
+    }
+    #endif
+
     private func completeTimer() {
         guard case .running(_, let duration) = state else { return }
         state = .paused(timeRemaining: 0, duration: duration)

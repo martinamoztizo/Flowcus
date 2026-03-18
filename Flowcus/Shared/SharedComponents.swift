@@ -33,6 +33,74 @@ enum Haptics {
     }
 }
 
+// MARK: - Spacing
+
+enum Spacing {
+    // Scale
+    static let xs:   CGFloat = 4
+    static let sm:   CGFloat = 8
+    static let md:   CGFloat = 12
+    static let lg:   CGFloat = 16
+    static let xl:   CGFloat = 20
+    static let xxl:  CGFloat = 24
+    static let xxxl: CGFloat = 32
+
+    // Semantic
+    static let screenH:    CGFloat = xl    // screen horizontal margin
+    static let cardInner:  CGFloat = lg    // padding inside cards
+    static let listItem:   CGFloat = md    // gap between list items
+    static let sectionGap: CGFloat = xxl   // gap between sections
+    static let inline:     CGFloat = sm    // icon-to-label, small gaps
+    static let tabBarH:    CGFloat = xxxl  // tab bar horizontal padding
+}
+
+// MARK: - Corner Radii
+
+enum AppShape {
+    static let sm = RoundedRectangle(cornerRadius: 8, style: .continuous)   // chips, badges, text fields
+    static let md = RoundedRectangle(cornerRadius: 12, style: .continuous)  // cards, rows, containers
+    static let lg = RoundedRectangle(cornerRadius: 16, style: .continuous)  // sections, larger surfaces
+    static let xl = RoundedRectangle(cornerRadius: 20, style: .continuous)  // hero elements, primary buttons
+}
+
+// MARK: - Animation
+
+// USAGE:
+//   .appSnappy  — small/fast: checkbox, tab switch, picker, emoji tap
+//   .appSmooth  — medium: cards, sheets, calendar drag, reward card
+//   .appWave    — liquid fill only (intentionally slow)
+
+extension Animation {
+    static let appSnappy = Animation.spring(response: 0.3, dampingFraction: 0.8)
+    static let appSmooth = Animation.spring(response: 0.5, dampingFraction: 0.8)
+    static let appWave   = Animation.spring(response: 2.0, dampingFraction: 1.0)
+}
+
+// MARK: - Button Styles
+
+struct FlowcusPillButtonStyle: ButtonStyle {
+    var isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.appCaption)
+            .fontWeight(.medium)
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, 6)
+            .background(
+                Capsule().fill(isSelected ? AnyShapeStyle(Color.cardinalRed) : AnyShapeStyle(.ultraThinMaterial))
+            )
+            .foregroundStyle(isSelected ? .white : .secondary)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}
+
+extension ButtonStyle where Self == FlowcusPillButtonStyle {
+    static func flowcusPill(isSelected: Bool) -> FlowcusPillButtonStyle {
+        FlowcusPillButtonStyle(isSelected: isSelected)
+    }
+}
+
 // MARK: - Animated Checkbox
 
 struct AnimatedCheckbox: View {

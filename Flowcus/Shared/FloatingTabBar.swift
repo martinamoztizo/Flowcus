@@ -11,11 +11,11 @@ struct FloatingTabBar: View {
 
     @Namespace private var tabNamespace
 
-    private let tabs: [(icon: String, label: String, tag: Int)] = [
-        ("checkmark.circle.fill", "Tasks", 0),
-        ("timer", "Focus", 1),
-        ("book.fill", "Journal", 2),
-        ("flame.fill", "XP", 3)
+    private let tabs: [(icon: FlowcusIcon, label: String, tag: Int)] = [
+        (.tabTasks, "Tasks", 0),
+        (.tabFocus, "Focus", 1),
+        (.tabJournal, "Journal", 2),
+        (.tabAura, "Aura", 3)
     ]
 
     var body: some View {
@@ -23,13 +23,12 @@ struct FloatingTabBar: View {
             ForEach(tabs, id: \.tag) { tab in
                 Button {
                     Haptics.impact(.light)
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    withAnimation(.appSnappy) {
                         selectedTab = tab.tag
                     }
                 } label: {
                     VStack(spacing: 6) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 20, weight: .medium))
+                        tab.icon.sized(20)
                             .foregroundStyle(
                                 selectedTab == tab.tag
                                     ? Color.cardinalRed
@@ -56,16 +55,16 @@ struct FloatingTabBar: View {
                 .accessibilityLabel(tab.label)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Spacing.xl)
+        .padding(.vertical, Spacing.md)
         .background(
             Capsule()
                 .fill(.ultraThinMaterial)
                 .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
         )
-        .padding(.horizontal, 32)
+        .padding(.horizontal, Spacing.tabBarH)
         .offset(y: isVisible ? 0 : 100)
         .opacity(isVisible ? 1 : 0)
-        .animation(.easeInOut(duration: 0.3), value: isVisible)
+        .animation(.appSnappy, value: isVisible)
     }
 }

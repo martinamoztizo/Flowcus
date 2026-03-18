@@ -252,8 +252,7 @@ struct MatrixTaskCard: View {
 
             if task.quadrant == .q1, let focus = onFocus {
                 Button(action: focus) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.caption)
+                    FlowcusIcon.actionPlayCircle.sized(FlowcusIcon.captionSize)
                         .foregroundStyle(task.quadrant.color)
                 }
                 .buttonStyle(.plain)
@@ -269,7 +268,7 @@ struct MatrixTaskCard: View {
         .contextMenu {
             if let focus = onFocus {
                 Button(action: focus) {
-                    Label("Send to Focus", systemImage: "play.fill")
+                    Label { Text("Send to Focus") } icon: { FlowcusIcon.actionPlay.sized(17) }
                 }
             }
 

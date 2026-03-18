@@ -12,8 +12,10 @@ struct ContentView: View {
     @StateObject private var timerManager = TimeManager()
     @State private var selectedTab: Int = 0
     @State private var calendarProgress: Double = 0
+    @State private var showXPSheet = false
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("momentumTier") private var momentumTier: Int = 0
+    @AppStorage("debugEnabled") private var debugEnabled = false
+    @AppStorage("momentumTier") private var momentumTier: Int = 1
     @AppStorage("lastSessionTimestamp") private var lastSessionTimestamp: Double = 0
     @AppStorage("totalXP") private var totalXP: Int = 0
 
@@ -38,7 +40,7 @@ struct ContentView: View {
                     .opacity(selectedTab == 2 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 2)
 
-                XPView()
+                AuraView()
                     .opacity(selectedTab == 3 ? 1 : 0)
                     .allowsHitTesting(selectedTab == 3)
             }
@@ -47,27 +49,46 @@ struct ContentView: View {
             FloatingTabBar(selectedTab: $selectedTab, isVisible: !timerManager.isRunning)
                 .opacity(1.0 - tabBarCalendarEffect)
                 .offset(y: tabBarCalendarEffect * 60)
-                .padding(.bottom, 20)
+                .padding(.bottom, Spacing.xl)
 
             // XP pill — top-left, always compact
             VStack {
                 HStack {
-                    XPPillView(totalXP: totalXP, momentumTier: max(momentumTier, 1)) {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                            selectedTab = 3
-                        }
+                    XPPillView(totalXP: totalXP, momentumTier: momentumTier) {
+                        showXPSheet = true
                     }
                     Spacer()
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
+                .padding(.horizontal, Spacing.screenH)
+                .padding(.top, Spacing.sm)
                 Spacer()
             }
             .opacity(selectedTab != 3 && !timerManager.isRunning ? 1 : 0)
-            .animation(.easeInOut(duration: 0.3), value: selectedTab != 3 && !timerManager.isRunning)
+            .animation(.appSnappy, value: selectedTab != 3 && !timerManager.isRunning)
         }
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            if debugEnabled {
+                DebugTimeOverlay()
+                    .environmentObject(timerManager)
+                    .padding(.leading, Spacing.lg)
+                    .padding(.top, Spacing.xs)
+            }
+        }
+        .overlay {
+            if debugEnabled {
+                DebugStepperOverlay()
+                    .environmentObject(timerManager)
+            }
+        }
+        #endif
         .environmentObject(timerManager)
         .ignoresSafeArea(.keyboard)
+        .sheet(isPresented: $showXPSheet) {
+            XPView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 timerManager.appMovedToForeground()

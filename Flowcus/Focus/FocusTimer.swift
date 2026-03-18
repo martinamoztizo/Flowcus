@@ -57,13 +57,16 @@ struct FocusTimerView: View {
     // PERSIST MODE (Safe String Storage)
     @AppStorage("selectedModeRaw") private var selectedModeRaw: String = TimerMode.focus.rawValue
     @AppStorage("activeTaskID") private var activeTaskID: String = ""
-    @AppStorage("momentumTier") private var momentumTier: Int = 0
+    @AppStorage("momentumTier") private var momentumTier: Int = 1
     @AppStorage("lastSessionTimestamp") private var lastSessionTimestamp: Double = 0
     @AppStorage("sessionsToday") private var sessionsToday: Int = 0
     @AppStorage("sessionsTodayDate") private var sessionsTodayDate: String = ""
     @AppStorage("unlockedMilestones") private var unlockedMilestones: String = ""
+    @AppStorage("focusHistory") private var focusHistory: String = ""
     @AppStorage("totalFocusMinutes") private var totalFocusMinutes: Int = 0
     @AppStorage("totalFocusSessions") private var totalFocusSessions: Int = 0
+    @AppStorage("totalTasksCompleted") private var totalTasksCompleted: Int = 0
+    @AppStorage("totalJournalEntries") private var totalJournalEntries: Int = 0
 
     var selectedMode: TimerMode {
         get { TimerMode(rawValue: selectedModeRaw) ?? .focus }
@@ -364,7 +367,7 @@ struct FocusTimerView: View {
                 let todaySessions = incrementSessionsToday()
 
                 // 4. Calculate reward
-                var reward = RewardSystem.calculateReward(
+                let reward = RewardSystem.calculateReward(
                     mode: .focus,
                     didPause: timerManager.didPauseThisSession,
                     momentumTier: momentumTier,
@@ -380,7 +383,12 @@ struct FocusTimerView: View {
                     sessionDurationMinutes: completedDuration,
                     completedFullRunway: runwayBonuses.contains { $0.label == "Full Runway Clear" },
                     currentHour: Calendar.current.component(.hour, from: Date()),
-                    daysSinceLastSession: RewardSystem.daysSince(lastSessionTimestamp)
+                    daysSinceLastSession: RewardSystem.daysSince(lastSessionTimestamp),
+                    currentLevel: RewardSystem.levelInfo(for: totalXP).level,
+                    currentStreak: momentumTier,
+                    currentWeekday: Calendar.current.component(.weekday, from: Date()),
+                    totalTasksCompleted: totalTasksCompleted,
+                    totalJournalEntries: totalJournalEntries
                 )
                 let unlockedSet = RewardSystem.parseUnlocked(unlockedMilestones)
                 let newMilestones = RewardSystem.checkNewMilestones(context: milestoneCtx, unlocked: unlockedSet)
@@ -408,6 +416,9 @@ struct FocusTimerView: View {
                     unlockedMilestones = RewardSystem.serializeUnlocked(updated)
                 }
 
+                // Record session for heat map
+                focusHistory = RewardSystem.recordSession(in: focusHistory, date: Date(), minutes: completedDuration)
+
                 // 9. Clear active task
                 activeTask = nil
                 activeTaskID = ""
@@ -426,15 +437,27 @@ struct FocusTimerView: View {
                 )
                 showRewardCard = true
             } else if selectedMode == .longBreak {
-                // Long break: mini reward
-                totalXP += 10
-                miniRewardXP = 10
+                // Long break: route through RewardSystem
+                let breakReward = RewardSystem.calculateReward(
+                    mode: .longBreak,
+                    didPause: false,
+                    momentumTier: momentumTier,
+                    sessionsToday: sessionsToday
+                )
+                totalXP += breakReward.totalXP
+                miniRewardXP = breakReward.totalXP
                 miniRewardLevel = RewardSystem.levelInfo(for: totalXP)
                 showMiniRewardCard = true
                 selectedMode = .focus
             } else {
-                // Short break: silent XP
-                totalXP += 5
+                // Short break: route through RewardSystem
+                let breakReward = RewardSystem.calculateReward(
+                    mode: .shortBreak,
+                    didPause: false,
+                    momentumTier: momentumTier,
+                    sessionsToday: sessionsToday
+                )
+                totalXP += breakReward.totalXP
                 selectedMode = .focus
             }
             updateTimerForMode(selectedMode)

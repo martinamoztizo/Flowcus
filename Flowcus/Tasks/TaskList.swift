@@ -29,11 +29,11 @@ enum TaskViewMode: String, CaseIterable, Hashable {
         }
     }
 
-    var icon: String {
+    var icon: FlowcusIcon {
         switch self {
-        case .list: return "checklist"
-        case .matrix: return "square.grid.2x2"
-        case .runway: return "airplane.departure"
+        case .list: return .modeList
+        case .matrix: return .modeMatrix
+        case .runway: return .modeRunway
         }
     }
 
@@ -239,8 +239,7 @@ struct TaskViewCard: View {
                     .fill(mode.accentColor.opacity(0.15))
                     .frame(width: 50, height: 50)
                     .overlay(
-                        Image(systemName: mode.icon)
-                            .font(.title2)
+                        mode.icon.sized(FlowcusIcon.titleSize)
                             .foregroundStyle(mode.accentColor)
                     )
 
@@ -326,8 +325,7 @@ struct DailyTaskList: View {
                 // Custom replacement for ContentUnavailableView with friendlier messaging
                 Spacer()
                 VStack(spacing: 12) {
-                    Image(systemName: "checklist")
-                        .font(.system(size: 48))
+                    FlowcusIcon.checklist.sized(FlowcusIcon.heroSize)
                         .foregroundStyle(Color.cardinalRed.opacity(0.5))
                     Text("Nothing planned yet")
                         .font(.appHeadline)

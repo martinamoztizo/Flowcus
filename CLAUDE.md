@@ -2,50 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Documentation
-Use **CLAUDE.md** as the primary reference. Do not read `GEMINI.md` unless explicitly asked.
+## Build
 
-## Build & Run
-Open `Flowcus.xcodeproj` in Xcode and press **Cmd+R**. Pure native iOS — no package managers.
+Open `Flowcus.xcodeproj` in Xcode and press **Cmd+R**. No CLI build tool. No automated tests.
 
-CLI: `xcodebuild -project Flowcus.xcodeproj -scheme Flowcus -sdk iphonesimulator build`
+## Editing Rules
 
-## Architecture
+**Scope discipline** — Only modify files and lines directly related to the current task. Do not refactor, restyle, "clean up," or "improve" unrelated code. If a file must be touched, change only the specific lines the task requires. If a change to unrelated code seems necessary, explain why and ask for permission before proceeding.
 
-**Flowcus** is an ADHD-friendly iOS productivity app (SwiftUI + SwiftData).
+## Critical Patterns
 
-### Navigation — ContentView.swift
-Three-tab `TabView` tinted `.cardinalRed`:
-1. **Tasks** (`TaskListView`) — Date-linked tasks with swipe-up calendar panel
-2. **Focus** (`FocusTimerView`) — Liquid wave Pomodoro timer
-3. **Journal** (`JournalView`) — Mood-tracked brain dump entries
+**Tab layout** — All 4 tabs live simultaneously in a ZStack (not a TabView switch). Visibility is `.opacity()` + `.allowsHitTesting()`. This preserves `TimeManager` state.
 
-### State Management
-- **`TimeManager`** (`TimeManager.swift`): `ObservableObject`. Always inject with `@StateObject` in `FocusTimerView` — never `@ObservedObject` (would reset on parent rerender).
-- **`TimerState` enum** has three cases: `.idle(duration:)`, `.running(targetEndTime:duration:)`, `.paused(timeRemaining:duration:)`. Timer completion lands in `.paused(timeRemaining: 0, duration:)` — **not** `.idle`. Use `timeRemaining == 0 && !isRunning` to detect completion; `isPaused` returns false at completion because it checks `timeRemaining > 0`.
-- **`completionEvents: Int`** (`@Published private(set)`) increments on each session finish. **Not persisted** — resets on app kill. The Pomodoro cycling logic (Focus → Short Break → Long Break after 2 sessions) lives in `FocusTimerView.completeSession()`, not in `TimeManager`.
-- **`stopTimer()` in `FocusTimerView`** calls `timerManager.pause()` then `updateTimerForMode()` — there is no "stopped" state; stop = pause + duration reset.
-- **`selectedMode`** in `FocusTimerView` is a computed property with a nonmutating setter over `@AppStorage("selectedModeRaw")` — do not replace with a plain `@AppStorage` var or `@State`.
-- **AppStorage keys in use**: `workMinutes`, `shortBreakMinutes`, `longBreakMinutes`, `totalXP`, `sessionCount`, `selectedModeRaw`. Do not introduce duplicate keys.
+**TimeManager** — `@StateObject` in `ContentView`, passed as `@EnvironmentObject` everywhere. `@MainActor` class. `import Combine` is required even though it looks unused.
 
-### SwiftData — Critical Warning
-`FlowcusApp.swift` handles schema mismatch by **deleting and recreating the entire store** (DEBUG only — Release `fatalError`s). Adding, removing, or renaming `@Model` fields wipes all local data during development.
+**Timer completion** — Detect via `.onChange(of: timerManager.completionEvents)`. The completed state is `.paused(timeRemaining: 0, duration:)`, not `.idle`.
 
-`DailyTaskList` builds its `@Query` dynamically inside `init(date:)` using `_tasks = Query(filter:sort:)`. This is required for date-based predicate filtering in SwiftData — do not move the query to a property.
+**Persistence split** — SwiftData for `TaskItem` and `JournalEntry`. `@AppStorage` for everything XP/stats/timer-related. Adding SwiftData fields with default values (e.g., `= 0`) won't wipe the store.
 
-### Visual System
-- `Color.cardinalRed` is defined in `ColorProfile.swift` as both a `Color` extension and a `ShapeStyle` extension. Do not redefine it elsewhere.
-- The **focus wave** uses `Color.red` (not `.cardinalRed`) — intentional. The tab tint and UI accents use `.cardinalRed`. These are different values.
-- Tab bar hides only when `timerManager.isRunning` — it reappears when paused.
-- `preferredColorScheme(.dark)` is applied when `isSessionActive` (running or paused) to force white status bar icons.
+**Enums** — All use `String` raw values. Computed properties (`runwayTier`, `quadrant`) unwrap stored strings back to enums — always go through these, never the raw fields.
 
-## Key Patterns
-- **Subview extraction**: `FocusTimerView` splits into `TimerDisplayView` + `TimerControlsView` for SwiftUI compiler optimization — keep this pattern when adding to that file.
-- **Haptics**: `UIImpactFeedbackGenerator` for taps, `UINotificationFeedbackGenerator(.success)` for timer completion.
-- **Emoji bar**: `displayEmojis` always places `selectedMood` first; an invisible zero-size `TextField` with `@FocusState` captures the first character typed as the new emoji.
-- **Timer presets**: `timerPresets` is a file-level global constant in `SettingsView.swift`. Changing one duration in Settings auto-applies the full matching preset (all 3 durations update together).
+**Custom icons** — `FlowcusIcon` enum in `FlowcusIcon.swift`. Use `.image` / `.sized(CGFloat)`. Context menu `Label`s need the closure form: `Label { Text("…") } icon: { icon.sized(17) }`. SF Symbols still used for `plus`, `xmark`, `chevron.*`, `trash`, `arrow.*`, `clock`, `circle`.
 
-## Design Constraints
-- Interactive controls belong at the bottom of the screen (reachability).
-- Minimal, clean aesthetic — day/night appearance is driven by timer active state, not system setting.
-- ADHD-centric: low friction, no guilt mechanics, strong visual feedback.
+**`DailyTaskList`** — builds `@Query` inside `init(date:)`. This is intentional and required for SwiftData date filtering.
+
+**XP logic** — `RewardSystem.swift` is pure logic, no SwiftUI. All XP writes go through a single AppStorage write at the end of `completeSession()` in `FocusTimer.swift`.

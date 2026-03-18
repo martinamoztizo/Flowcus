@@ -94,17 +94,21 @@ struct JournalView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { showingAddSheet = true }) {
-                        Image(systemName: "square.and.pencil")
+                        FlowcusIcon.compose.sized(20)
                     }
                 }
             }
             // Sheet for ADDING (entry is nil)
             .sheet(isPresented: $showingAddSheet) {
                 JournalEditorView(entry: nil, recommendedEmojis: topEmojis)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             // Sheet for EDITING (entry is passed)
             .sheet(item: $editingEntry) { entry in
                 JournalEditorView(entry: entry, recommendedEmojis: topEmojis)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             .overlay {
                 if entries.isEmpty {
